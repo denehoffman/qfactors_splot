@@ -16,8 +16,8 @@ from scipy.integrate import quad
 from scipy.special import voigt_profile
 from sklearn.neighbors import NearestNeighbors
 
-mpl.style.use("frappe")
-rng = np.random.default_rng(0)
+# mpl.style.use("frappe")
+rng = np.random.default_rng(1)
 console = Console()
 
 # Generate MC according to https://arxiv.org/abs/0804.3382
@@ -33,6 +33,10 @@ t_true = 0.11
 t_false = 0.43
 t_min = 0
 t_max = 3
+g_true = 0.13
+g_false = 0.56
+g_min = -3
+g_max = 3
 voigt_norm = quad(lambda x: voigt_profile((x - m_omega), sigma, m_omega * G_omega/2), m_min, m_max)
 
 class Event(NamedTuple):
@@ -40,6 +44,7 @@ class Event(NamedTuple):
     costheta: float
     phi: float
     t: float
+    g: float
 
 # print(f"Norm of voigtian over ({m_min}, {m_max}): {voigt_norm[0]}±{voigt_norm[1]}")
 
@@ -79,11 +84,24 @@ def t_bkg(t: float | np.ndarray, tau: float=t_false) -> float | np.ndarray:
 
 t_bkg_max = t_bkg(t_min, t_false)
 
+def g_sig(g: float | np.ndarray, sigma: float=g_true) -> float | np.ndarray:
+    return np.exp(-0.5 * g**2 / sigma**2) / (np.sqrt(2 * np.pi) * sigma)
+
+g_sig_max = g_sig(0, g_true)
+
+def g_bkg(g: float | np.ndarray, sigma: float=t_false) -> float | np.ndarray:
+    return np.exp(-0.5 * g**2 / sigma**2) / (np.sqrt(2 * np.pi) * sigma)
+
+g_bkg_max = g_bkg(0, g_false)
+
+
+
 def gen_sig(n: int = 10_000) -> list:
     with Progress(transient=True) as progress:
         m_task = progress.add_task("Generating Signal (mass)", total=n)
         w_task = progress.add_task("Generating Signal (costheta, phi)", total=n)
         t_task = progress.add_task("Generating Signal (t)", total=n)
+        g_task = progress.add_task("Generating Signal (g)", total=n)
         ms = []
         while len(ms) < n:
             m_star = rng.uniform(m_min, m_max)
@@ -105,13 +123,21 @@ def gen_sig(n: int = 10_000) -> list:
             if t_sig(t_star) >= rng.uniform(0, t_sig_max):
                 ts.append(t_star)
                 progress.advance(t_task)
-        return [Event(m, costheta, phi, t) for m, costheta, phi, t in zip(ms, costhetas, phis, ts)]
+        gs = []
+        while len(gs) < n:
+            g_star = rng.uniform(g_min, g_max)
+            if g_sig(g_star) >= rng.uniform(0, g_sig_max):
+                gs.append(g_star)
+                progress.advance(g_task)
+
+        return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
 
 def gen_bkg(n: int = 10_000) -> list:
     with Progress(transient=True) as progress:
         m_task = progress.add_task("Generating Background (mass)", total=n)
         w_task = progress.add_task("Generating Background (costheta, phi)", total=n)
         t_task = progress.add_task("Generating Background (t)", total=n)
+        g_task = progress.add_task("Generating Background (g)", total=n)
         ms = []
         while len(ms) < n:
             m_star = rng.uniform(m_min, m_max)
@@ -133,7 +159,13 @@ def gen_bkg(n: int = 10_000) -> list:
             if t_bkg(t_star) >= rng.uniform(0, t_bkg_max):
                 ts.append(t_star)
                 progress.advance(t_task)
-        return [Event(m, costheta, phi, t) for m, costheta, phi, t in zip(ms, costhetas, phis, ts)]
+        gs = []
+        while len(gs) < n:
+            g_star = rng.uniform(g_min, g_max)
+            if g_bkg(g_star) >= rng.uniform(0, g_bkg_max):
+                gs.append(g_star)
+                progress.advance(g_task)
+        return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
 
 def k_nearest_neighbors(x, k=100):
     neighbors = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree').fit(x)
@@ -170,16 +202,20 @@ def plot_events(events: list[Event], weights: np.ndarray | None = None, filename
     costhetas = [e.costheta for e in events]
     phis = [e.phi for e in events]
     ts = [e.t for e in events]
-    fig, ax = plt.subplots(ncols=3, figsize=(9, 3))
-    ax[0].hist(ms, bins=100, range=(m_min, m_max), weights=weights)
-    ax[0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[0].set_ylabel(r"Counts / 2 (MeV/$c^2$)")
-    ax[1].hist2d(costhetas, phis, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], weights=weights)
-    ax[1].set_xlabel(r"$\cos(\theta)$")
-    ax[1].set_ylabel(r"$\phi$")
-    ax[2].hist(ts, bins=100, range=(t_min, t_max), weights=weights)
-    ax[2].set_xlabel("$t$ (GeV/c)${}^2$")
-    ax[2].set_ylabel(r"Counts / 2 (MeV/c)${}^2$")
+    gs = [e.g for e in events]
+    fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(6, 6))
+    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights)
+    ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
+    ax[0, 0].set_ylabel(r"Counts / 2 (MeV/$c^2$)")
+    ax[0, 1].hist2d(costhetas, phis, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], weights=weights)
+    ax[0, 1].set_xlabel(r"$\cos(\theta)$")
+    ax[0, 1].set_ylabel(r"$\phi$")
+    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights)
+    ax[1, 0].set_xlabel("$t$ (arb)")
+    ax[1, 0].set_ylabel(r"Counts / 0.03 (arb)")
+    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights)
+    ax[1, 1].set_xlabel("$g$ (arb)")
+    ax[1, 1].set_ylabel(r"Counts / 0.06 (arb)")
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
 
@@ -188,11 +224,13 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     costhetas_sig = [e.costheta for e in events_sig]
     phis_sig = [e.phi for e in events_sig]
     ts_sig = [e.t for e in events_sig]
+    gs_sig = [e.g for e in events_sig]
     ms_bkg = [e.mass for e in events_bkg]
     costhetas_bkg = [e.costheta for e in events_bkg]
     phis_bkg = [e.phi for e in events_bkg]
     ts_bkg = [e.t for e in events_bkg]
-    fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(8, 8), sharey='col')
+    gs_bkg = [e.g for e in events_bkg]
+    fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(12, 9), sharey='col')
 
     # signal plots
     ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max))
@@ -202,8 +240,11 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
     ax[0, 2].hist(ts_sig, bins=100, range=(t_min, t_max))
-    ax[0, 2].set_xlabel("$t$ (GeV/c)${}^2$")
-    ax[0, 2].set_ylabel(r"Counts / 2 (MeV/c)${}^2$")
+    ax[0, 2].set_xlabel("$t$ (arb)$")
+    ax[0, 2].set_ylabel(r"Counts / 0.03 (arb)$")
+    ax[0, 3].hist(gs_sig, bins=100, range=(g_min, g_max))
+    ax[0, 3].set_xlabel("$g$ (arb)$")
+    ax[0, 3].set_ylabel(r"Counts / 0.06 (arb)$")
 
     # background plots
     ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), color='C1')
@@ -213,10 +254,13 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[1, 1].set_xlabel(r"$\cos(\theta)$")
     ax[1, 1].set_ylabel(r"$\phi$")
     ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), color='C1')
-    ax[1, 2].set_xlabel("$t$ (GeV/c)${}^2$")
-    ax[1, 2].set_ylabel(r"Counts / 2 (MeV/c)${}^2$")
+    ax[1, 2].set_xlabel("$t$ (arb)$")
+    ax[1, 2].set_ylabel(r"Counts / 0.03 (arb)$")
+    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), color='C1')
+    ax[1, 3].set_xlabel("$g$ (arb)$")
+    ax[1, 3].set_ylabel(r"Counts / 0.06 (arb)$")
 
-    # combind plots
+    # combined plots
     ax[2, 0].hist([ms_bkg, ms_sig], bins=100, range=(m_min, m_max), stacked=True, color=['C1', 'C0'])
     ax[2, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[2, 0].set_ylabel(r"Counts / 2 (MeV/$c^2$)")
@@ -224,8 +268,11 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[2, 1].set_xlabel(r"$\cos(\theta)$")
     ax[2, 1].set_ylabel(r"$\phi$")
     ax[2, 2].hist([ts_bkg, ts_sig], bins=100, range=(t_min, t_max), stacked=True, color=['C1', 'C0'])
-    ax[2, 2].set_xlabel("$t$ (GeV/c)${}^2$")
-    ax[2, 2].set_ylabel(r"Counts / 2 (MeV/c)${}^2$")
+    ax[2, 2].set_xlabel("$t$ (arb)$")
+    ax[2, 2].set_ylabel(r"Counts / 0.03 (arb)$")
+    ax[2, 3].hist([gs_bkg, gs_sig], bins=100, range=(g_min, g_max), stacked=True, color=['C1', 'C0'])
+    ax[2, 3].set_xlabel("$g$ (arb)$")
+    ax[2, 3].set_ylabel(r"Counts / 0.06 (arb)$")
 
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
@@ -419,12 +466,17 @@ def fit_t(events: list[Event], weights: np.ndarray | None = None, t_init: float=
     wunll_t = WeightedUnbinnedNLL(ts, t_sig, weights=weights)
     return wunll_t.fit([t_true])
 
+def fit_g(events: list[Event], weights: np.ndarray | None = None, g_init: float=g_true):
+    gs = np.array([e.g for e in events])
+    wunll_g = WeightedUnbinnedNLL(gs, g_sig, weights=weights)
+    return wunll_g.fit([g_true])
+
 
 def main():
     events_sig = gen_sig()
     events_bkg = gen_bkg()
     with console.status("Plotting events"):
-        plot_all_events(events_sig, events_bkg, filename="all_events.png")
+        plot_all_events(events_sig, events_bkg, filename="all_events_g.png")
     events_all = events_sig + events_bkg
 
     sideband_weights = calculate_sideband_weights(events_all)
@@ -433,49 +485,49 @@ def main():
     sweights = calculate_splot_weights(events_all)
     sq_factors = calculate_sq_factors(events_all)
 
-    with console.status("Plotting events with Q-factor weights"):
-        plot_events(events_all, weights=q_factors, filename="qfactors.png")
-
     t = Table(title="Fit Results")
     t.add_column("Weighting Method")
     t.add_column("ρ⁰₀₀")
     t.add_column("ρ⁰₁,₋₁")
-    t.add_column("Re[ρ,⁰₁₀]")
+    t.add_column("Re[ρ⁰₁₀]")
     t.add_column("τ")
-    t.add_row("Truth", f"{p00_true:.2f}", f"{p1n1_true:.2f}", f"{p10_true:.2f}", f"{t_true:.2f}", end_section=True)
+    t.add_column("σ")
+    t.add_row("Truth", f"{p00_true:.2f}", f"{p1n1_true:.2f}", f"{p10_true:.2f}", f"{t_true:.2f}", f"{g_true:.2f}", end_section=True)
 
-    res_angles = fit_angles(events_all, weights=None)
-    res_t = fit_t(events_all, weights=None)
-    t.add_row("None", f"[red]{res_angles.x[0]:.2f}[/]", f"[red]{res_angles.x[1]:.2f}[/]", f"[red]{res_angles.x[2]:.2f}[/]", f"[red]{res_t.x[0]:.2f}[/]")
+    def colorize_by_number(fit: float, true: float, threshold_yellow: float=0.02, threshold_red: float=0.05) -> str:
+        if abs(fit - true) > threshold_red:
+            return f"[red]{fit:.2f}[/]"
+        elif abs(fit - true) > threshold_yellow:
+            return f"[yellow]{fit:.2f}[/]"
+        else:
+            return f"[blue]{fit:.2f}[/]"
 
-    res_angles_sideband = fit_angles(events_all, weights=sideband_weights)
-    res_t_sideband = fit_t(events_all, weights=sideband_weights)
-    t.add_row("Sideband Subtraction", f"{res_angles_sideband.x[0]:.2f}", f"{res_angles_sideband.x[1]:.2f}", f"{res_angles_sideband.x[2]:.2f}", f"{res_t_sideband.x[0]:.2f}")
+    def get_results(events, weights=None):
+        res_angles = fit_angles(events, weights=weights)
+        res_t = fit_t(events, weights=weights)
+        res_g = fit_g(events, weights=weights)
+        p00_fit = colorize_by_number(res_angles.x[0], p00_true)
+        p1n1_fit = colorize_by_number(res_angles.x[1], p1n1_true)
+        p10_fit = colorize_by_number(res_angles.x[2], p10_true)
+        t_fit = colorize_by_number(res_t.x[0], t_true)
+        g_fit = colorize_by_number(res_g.x[0], g_true)
+        return [p00_fit, p1n1_fit, p10_fit, t_fit, g_fit]
 
-    res_angles_q_factors = fit_angles(events_all, weights=q_factors)
-    res_t_q_factors = fit_t(events_all, weights=q_factors)
-    t.add_row("Q-Factors", f"{res_angles_q_factors.x[0]:.2f}", f"{res_angles_q_factors.x[1]:.2f}", f"{res_angles_q_factors.x[2]:.2f}", f"[red]{res_t_q_factors.x[0]:.2f}[/]")
-
-    res_angles_q_factors_t = fit_angles(events_all, weights=q_factors_t)
-    res_t_q_factors_t = fit_t(events_all, weights=q_factors_t)
-    t.add_row("Q-Factors (with t)", f"{res_angles_q_factors_t.x[0]:.2f}", f"{res_angles_q_factors_t.x[1]:.2f}", f"{res_angles_q_factors_t.x[2]:.2f}", f"{res_t_q_factors_t.x[0]:.2f}")
-
-    res_angles_sweights = fit_angles(events_all, weights=sweights)
-    res_t_sweights = fit_t(events_all, weights=sweights)
-    t.add_row("sWeights", f"{res_angles_sweights.x[0]:.2f}", f"{res_angles_sweights.x[1]:.2f}", f"{res_angles_sweights.x[2]:.2f}", f"{res_t_sweights.x[0]:.2f}")
-
-    res_angles_sq_factors = fit_angles(events_all, weights=sq_factors)
-    res_t_sq_factors = fit_t(events_all, weights=sq_factors)
-    t.add_row("sQ-Factors", f"{res_angles_sq_factors.x[0]:.2f}", f"{res_angles_sq_factors.x[1]:.2f}", f"{res_angles_sq_factors.x[2]:.2f}", f"{res_t_sq_factors.x[0]:.2f}")
+    t.add_row("None", *get_results(events_all, weights=None))
+    t.add_row("Sideband Subtraction", *get_results(events_all, weights=sideband_weights))
+    t.add_row("Q-Factors", *get_results(events_all, weights=q_factors))
+    t.add_row("Q-Factors (with t)", *get_results(events_all, weights=q_factors_t))
+    t.add_row("sWeights", *get_results(events_all, weights=sweights))
+    t.add_row("sQ-Factors", *get_results(events_all, weights=sq_factors))
 
     console.print(t)
 
-    plot_events(events_bkg, weights=None, filename="bkg_no_weights.png")
-    plot_events(events_bkg, weights=sideband_weights[10_000:], filename="bkg_sideband.png")
-    plot_events(events_bkg, weights=q_factors[10_000:], filename="bkg_q_factor.png")
-    plot_events(events_bkg, weights=q_factors_t[10_000:], filename="bkg_q_factor_t.png")
-    plot_events(events_bkg, weights=sweights[10_000:], filename="bkg_sweight.png")
-    plot_events(events_bkg, weights=sq_factors[10_000:], filename="bkg_sq_factor.png")
+    plot_events(events_bkg, weights=None, filename="bkg_no_weights_g.png")
+    plot_events(events_bkg, weights=sideband_weights[10_000:], filename="bkg_sideband_g.png")
+    plot_events(events_bkg, weights=q_factors[10_000:], filename="bkg_q_factor_g.png")
+    plot_events(events_bkg, weights=q_factors_t[10_000:], filename="bkg_q_factor_t_g.png")
+    plot_events(events_bkg, weights=sweights[10_000:], filename="bkg_sweight_g.png")
+    plot_events(events_bkg, weights=sq_factors[10_000:], filename="bkg_sq_factor_g.png")
 
 
 if __name__ == '__main__':
