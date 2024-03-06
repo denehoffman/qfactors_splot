@@ -17,6 +17,7 @@ from scipy.special import voigt_profile
 from sklearn.neighbors import NearestNeighbors
 
 # mpl.style.use("frappe")
+plt.rc('axes', labelsize=16)
 rng = np.random.default_rng(1)
 console = Console()
 
@@ -32,11 +33,11 @@ p10_true = 0.10
 t_true = 0.11
 t_false = 0.43
 t_min = 0
-t_max = 3
+t_max = 2
 g_true = 0.13
 g_false = 0.56
-g_min = -3
-g_max = 3
+g_min = -1.8
+g_max = 1.8
 voigt_norm = quad(lambda x: voigt_profile((x - m_omega), sigma, m_omega * G_omega/2), m_min, m_max)
 
 class Event(NamedTuple):
@@ -197,25 +198,34 @@ class WeightedUnbinnedNLL:
     def fit(self, p0: list[float], *args, **kwargs):
         return opt.minimize(lambda x, *args: self.__call__(x, *args), p0, **kwargs)
 
-def plot_events(events: list[Event], weights: np.ndarray | None = None, filename='events.png'):
+def plot_events(events: list[Event], signal_events: list[Event], weights: np.ndarray | None = None, filename='events.png'):
     ms = [e.mass for e in events]
     costhetas = [e.costheta for e in events]
     phis = [e.phi for e in events]
     ts = [e.t for e in events]
     gs = [e.g for e in events]
+    ms_sig = [e.mass for e in signal_events]
+    ts_sig = [e.t for e in signal_events]
+    gs_sig = [e.g for e in signal_events]
     fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(6, 6))
-    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights)
+    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, label='Weighted')
+    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), histtype='step', label='Truth')
     ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[0, 0].set_ylabel(r"Counts / 2 (MeV/$c^2$)")
+    ax[0, 0].set_ylabel(r"Counts / 0.002")
+    ax[0, 0].legend(loc='upper right')
     ax[0, 1].hist2d(costhetas, phis, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], weights=weights)
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
-    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights)
+    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, label='Weighted')
+    ax[1, 0].hist(ts_sig, bins=100, range=(t_min, t_max), histtype='step', label='Truth')
     ax[1, 0].set_xlabel("$t$ (arb)")
-    ax[1, 0].set_ylabel(r"Counts / 0.03 (arb)")
-    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights)
+    ax[1, 0].set_ylabel(r"Counts / 0.02")
+    ax[1, 0].legend(loc='upper right')
+    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, label='Weighted')
+    ax[1, 1].hist(gs_sig, bins=100, range=(g_min, g_max), histtype='step', label='Truth')
     ax[1, 1].set_xlabel("$g$ (arb)")
-    ax[1, 1].set_ylabel(r"Counts / 0.06 (arb)")
+    ax[1, 1].set_ylabel(r"Counts / 0.036")
+    ax[1, 1].legend(loc='upper right')
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
     plt.close()
@@ -234,46 +244,55 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(12, 9), sharey='col')
 
     # signal plots
-    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max))
+    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), label="signal")
     ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[0, 0].set_ylabel(r"Counts / 2 (MeV/$c^2$)")
-    ax[0, 1].hist2d(costhetas_sig, phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)])
+    ax[0, 0].set_ylabel(r"Counts / 0.002")
+    ax[0, 0].legend(loc="upper right")
+    ax[0, 1].hist2d(costhetas_sig, phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="signal")
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
-    ax[0, 2].hist(ts_sig, bins=100, range=(t_min, t_max))
-    ax[0, 2].set_xlabel("$t$ (arb)$")
-    ax[0, 2].set_ylabel(r"Counts / 0.03 (arb)$")
-    ax[0, 3].hist(gs_sig, bins=100, range=(g_min, g_max))
-    ax[0, 3].set_xlabel("$g$ (arb)$")
-    ax[0, 3].set_ylabel(r"Counts / 0.06 (arb)$")
+    ax[0, 2].hist(ts_sig, bins=100, range=(t_min, t_max), label="signal")
+    ax[0, 2].set_xlabel("$t$ (arb)")
+    ax[0, 2].set_ylabel(r"Counts / 0.02")
+    ax[0, 2].legend(loc="upper right")
+    ax[0, 3].hist(gs_sig, bins=100, range=(g_min, g_max), label="signal")
+    ax[0, 3].set_xlabel("$g$ (arb)")
+    ax[0, 3].set_ylabel(r"Counts / 0.036")
+    ax[0, 3].legend(loc="upper right")
 
     # background plots
-    ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), color='C1')
+    ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), color='C1', label="background")
     ax[1, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[1, 0].set_ylabel(r"Counts / 2 (MeV/$c^2$)")
-    ax[1, 1].hist2d(costhetas_bkg, phis_bkg, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)])
+    ax[1, 0].set_ylabel(r"Counts / 0.002")
+    ax[1, 0].legend(loc="upper right")
+    ax[1, 1].hist2d(costhetas_bkg, phis_bkg, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="background")
     ax[1, 1].set_xlabel(r"$\cos(\theta)$")
     ax[1, 1].set_ylabel(r"$\phi$")
-    ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), color='C1')
-    ax[1, 2].set_xlabel("$t$ (arb)$")
-    ax[1, 2].set_ylabel(r"Counts / 0.03 (arb)$")
-    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), color='C1')
-    ax[1, 3].set_xlabel("$g$ (arb)$")
-    ax[1, 3].set_ylabel(r"Counts / 0.06 (arb)$")
+    ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), color='C1', label="background")
+    ax[1, 2].set_xlabel("$t$ (arb)")
+    ax[1, 2].set_ylabel(r"Counts / 0.02")
+    ax[1, 2].legend(loc="upper right")
+    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), color='C1', label="background")
+    ax[1, 3].set_xlabel("$g$ (arb)")
+    ax[1, 3].set_ylabel(r"Counts / 0.036")
+    ax[1, 3].legend(loc="upper right")
 
     # combined plots
-    ax[2, 0].hist([ms_bkg, ms_sig], bins=100, range=(m_min, m_max), stacked=True, color=['C1', 'C0'])
+    ax[2, 0].hist([ms_bkg, ms_sig], bins=100, range=(m_min, m_max), stacked=True, color=['C1', 'C0'], label=["background", "signal"])
     ax[2, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[2, 0].set_ylabel(r"Counts / 2 (MeV/$c^2$)")
-    ax[2, 1].hist2d(costhetas_bkg + costhetas_sig, phis_bkg + phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)])
+    ax[2, 0].set_ylabel(r"Counts / 0.002")
+    ax[2, 0].legend(loc="upper right")
+    ax[2, 1].hist2d(costhetas_bkg + costhetas_sig, phis_bkg + phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label=["background", "signal"])
     ax[2, 1].set_xlabel(r"$\cos(\theta)$")
     ax[2, 1].set_ylabel(r"$\phi$")
-    ax[2, 2].hist([ts_bkg, ts_sig], bins=100, range=(t_min, t_max), stacked=True, color=['C1', 'C0'])
-    ax[2, 2].set_xlabel("$t$ (arb)$")
-    ax[2, 2].set_ylabel(r"Counts / 0.03 (arb)$")
-    ax[2, 3].hist([gs_bkg, gs_sig], bins=100, range=(g_min, g_max), stacked=True, color=['C1', 'C0'])
-    ax[2, 3].set_xlabel("$g$ (arb)$")
-    ax[2, 3].set_ylabel(r"Counts / 0.06 (arb)$")
+    ax[2, 2].hist([ts_bkg, ts_sig], bins=100, range=(t_min, t_max), stacked=True, color=['C1', 'C0'], label=["background", "signal"])
+    ax[2, 2].set_xlabel("$t$ (arb)")
+    ax[2, 2].set_ylabel(r"Counts / 0.02")
+    ax[2, 2].legend(loc="upper right")
+    ax[2, 3].hist([gs_bkg, gs_sig], bins=100, range=(g_min, g_max), stacked=True, color=['C1', 'C0'], label=["background", "signal"])
+    ax[2, 3].set_xlabel("$g$ (arb)")
+    ax[2, 3].set_ylabel(r"Counts / 0.036")
+    ax[2, 3].legend(loc="upper right")
 
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
@@ -547,7 +566,7 @@ def main():
     events_sig = gen_sig()
     events_bkg = gen_bkg()
     with console.status("Plotting events"):
-        plot_all_events(events_sig, events_bkg, filename="all_events_g.png")
+        plot_all_events(events_sig, events_bkg, filename="all_events.png")
     events_all = events_sig + events_bkg
 
     sideband_weights = calculate_sideband_weights(events_all)
@@ -597,32 +616,32 @@ def main():
 
     console.print(t)
 
-    plot_events(events_bkg, weights=None, filename="bkg_no_weights.png")
-    plot_events(events_bkg, weights=sideband_weights[10_000:], filename="bkg_sideband.png")
-    plot_events(events_bkg, weights=q_factors[10_000:], filename="bkg_q_factor.png")
-    plot_events(events_bkg, weights=q_factors_t[10_000:], filename="bkg_q_factor_t.png")
-    plot_events(events_bkg, weights=q_factors_g[10_000:], filename="bkg_q_factor_g.png")
-    plot_events(events_bkg, weights=q_factors_t_g[10_000:], filename="bkg_q_factor_t_g.png")
-    plot_events(events_bkg, weights=sweights[10_000:], filename="bkg_sweight.png")
-    plot_events(events_bkg, weights=sq_factors[10_000:], filename="bkg_sq_factor.png")
+    plot_events(events_bkg, events_sig, weights=None, filename="bkg_no_weights.png")
+    plot_events(events_bkg, events_sig, weights=sideband_weights[10_000:], filename="bkg_sideband.png")
+    plot_events(events_bkg, events_sig, weights=q_factors[10_000:], filename="bkg_q_factor.png")
+    plot_events(events_bkg, events_sig, weights=q_factors_t[10_000:], filename="bkg_q_factor_t.png")
+    plot_events(events_bkg, events_sig, weights=q_factors_g[10_000:], filename="bkg_q_factor_g.png")
+    plot_events(events_bkg, events_sig, weights=q_factors_t_g[10_000:], filename="bkg_q_factor_t_g.png")
+    plot_events(events_bkg, events_sig, weights=sweights[10_000:], filename="bkg_sweight.png")
+    plot_events(events_bkg, events_sig, weights=sq_factors[10_000:], filename="bkg_sq_factor.png")
 
-    plot_events(events_sig, weights=None, filename="sig_no_weights.png")
-    plot_events(events_sig, weights=sideband_weights[:10_000], filename="sig_sideband.png")
-    plot_events(events_sig, weights=q_factors[:10_000], filename="sig_q_factor.png")
-    plot_events(events_sig, weights=q_factors_t[:10_000], filename="sig_q_factor_t.png")
-    plot_events(events_sig, weights=q_factors_g[:10_000], filename="sig_q_factor_g.png")
-    plot_events(events_sig, weights=q_factors_t_g[:10_000], filename="sig_q_factor_t_g.png")
-    plot_events(events_sig, weights=sweights[:10_000], filename="sig_sweight.png")
-    plot_events(events_sig, weights=sq_factors[:10_000], filename="sig_sq_factor.png")
+    plot_events(events_sig, events_sig, weights=None, filename="sig_no_weights.png")
+    plot_events(events_sig, events_sig, weights=sideband_weights[:10_000], filename="sig_sideband.png")
+    plot_events(events_sig, events_sig, weights=q_factors[:10_000], filename="sig_q_factor.png")
+    plot_events(events_sig, events_sig, weights=q_factors_t[:10_000], filename="sig_q_factor_t.png")
+    plot_events(events_sig, events_sig, weights=q_factors_g[:10_000], filename="sig_q_factor_g.png")
+    plot_events(events_sig, events_sig, weights=q_factors_t_g[:10_000], filename="sig_q_factor_t_g.png")
+    plot_events(events_sig, events_sig, weights=sweights[:10_000], filename="sig_sweight.png")
+    plot_events(events_sig, events_sig, weights=sq_factors[:10_000], filename="sig_sq_factor.png")
 
-    plot_events(events_all, weights=None, filename="all_no_weights.png")
-    plot_events(events_all, weights=sideband_weights, filename="all_sideband.png")
-    plot_events(events_all, weights=q_factors, filename="all_q_factor.png")
-    plot_events(events_all, weights=q_factors_t, filename="all_q_factor_t.png")
-    plot_events(events_all, weights=q_factors_g, filename="all_q_factor_g.png")
-    plot_events(events_all, weights=q_factors_t_g, filename="all_q_factor_t_g.png")
-    plot_events(events_all, weights=sweights, filename="all_sweight.png")
-    plot_events(events_all, weights=sq_factors, filename="all_sq_factor.png")
+    plot_events(events_all, events_sig, weights=None, filename="all_no_weights.png")
+    plot_events(events_all, events_sig, weights=sideband_weights, filename="all_sideband.png")
+    plot_events(events_all, events_sig, weights=q_factors, filename="all_q_factor.png")
+    plot_events(events_all, events_sig, weights=q_factors_t, filename="all_q_factor_t.png")
+    plot_events(events_all, events_sig, weights=q_factors_g, filename="all_q_factor_g.png")
+    plot_events(events_all, events_sig, weights=q_factors_t_g, filename="all_q_factor_t_g.png")
+    plot_events(events_all, events_sig, weights=sweights, filename="all_sweight.png")
+    plot_events(events_all, events_sig, weights=sq_factors, filename="all_sq_factor.png")
 
 
 if __name__ == '__main__':
