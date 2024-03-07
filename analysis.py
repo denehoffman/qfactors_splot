@@ -1,8 +1,28 @@
 #!/usr/bin/env python3
+"""
+This script analyzes particle decay events by generating signal and background data, computing factors such as Q-factors and sPlot weights, and visualizing the data through plots and fits. The available options enable customization of the dataset size, plot types, and factor calculations.
+
+Usage:
+    analysis.py [--num-sig=<nsig>] [--num-bkg=<nbkg>] [--knn=<knn>] [--plot] [--qfactor-type=<qtype>] [--plot-fits] [--plot-splot] [--splot-variable=<var>]
+
+Options:
+    -h --help               Show this screen.
+    --num-sig=<nsig>        Number of signal events to generate. [default: 10000]
+    --num-bkg=<nbkg>        Number of background events to generate. [default: 10000]
+    --knn=<knn>             Number of nearest neighbors for kNN calculations. [default: 100]
+    --plot                  Enable plotting for events with their appropriate weighting scheme.
+    --qfactor-type=<qtype>  Specify the type of factor calculation for plotting. Choose from q_factors, sq_factors, q_factors_t, q_factors_g, q_factors_t_g. [default: q_factors]
+    --plot-fits             Enable plotting of fits for random events.
+    --plot-splot            Enable sPlot visualization for variable distributions.
+    --splot-variable=<var>  The variable for which to plot the sPlot weighted distribution. [default: mass]
+"""
+
+# Import necessary libraries
 from __future__ import annotations
 
 from typing import NamedTuple
 
+from docopt import docopt
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import mplcatppuccin
@@ -16,12 +36,16 @@ from scipy.integrate import quad
 from scipy.special import voigt_profile
 from sklearn.neighbors import NearestNeighbors
 
+from scipy.stats import norm
+from iminuit.cost import UnbinnedNLL   
+
+# Set matplotlib and random number generator settings
 # mpl.style.use("frappe")
 plt.rc('axes', labelsize=16)
 rng = np.random.default_rng(1)
 console = Console()
 
-# Generate MC according to https://arxiv.org/abs/0804.3382
+# Define constants to generate MC according to https://arxiv.org/abs/0804.3382
 m_min, m_max = 0.68, 0.88
 b_true = 0.3
 m_omega = 0.78256 # GeV/c2
@@ -40,6 +64,7 @@ g_min = -1.8
 g_max = 1.8
 voigt_norm = quad(lambda x: voigt_profile((x - m_omega), sigma, m_omega * G_omega/2), m_min, m_max)
 
+# Define an Event namedtuple for easy handling of data
 class Event(NamedTuple):
     mass: float
     costheta: float
@@ -49,18 +74,22 @@ class Event(NamedTuple):
 
 # print(f"Norm of voigtian over ({m_min}, {m_max}): {voigt_norm[0]}±{voigt_norm[1]}")
 
+# Define model functions for signal mass, background mass, signal angular distribution, etc.
 def m_sig(m: float | np.ndarray) -> float | np.ndarray:
+    """Signal mass distribution modeled by a normalized Voigtian"""
     return voigt_profile((m - m_omega), sigma, m_omega * G_omega/2) / voigt_norm[0]
 
 m_sig_max = m_sig(m_omega)
 
 def m_bkg(m: float | np.ndarray, b: float = b_true) -> float | np.ndarray:
+    """Background mass distribution modeled as a linear function"""
     return 2 * (m_min * (b - 1) + m_max * b + m - 2 * b * m) / (m_min - m_max)**2
 
 m_bkg_max = m_bkg(m_max, b_true)
 
 def w_sig(costheta: float | np.ndarray, phi: float | np.ndarray,
           p00: float = p00_true, p1n1: float = p1n1_true, p10: float = p10_true) -> float | np.ndarray:
+    """Signal angular distribution"""
     theta = np.arccos(costheta)
     return (3 / (4 * np.pi)) * (0.5 * (1 - p00)
                                 + 0.5 * (3 * p00 - 1) * np.cos(theta)**2
@@ -70,34 +99,40 @@ def w_sig(costheta: float | np.ndarray, phi: float | np.ndarray,
 w_sig_max = 1.61558
 
 def w_bkg(costheta: float | np.ndarray, phi: float | np.ndarray) -> float | np.ndarray:
+    """Background angular distribution"""
     theta = np.arccos(costheta)
     return (1 + np.abs(np.sin(theta) * np.cos(phi))) / (6 * np.pi)
 
 w_bkg_max = 1 / (3 * np.pi)
 
 def t_sig(t: float | np.ndarray, tau: float=t_true) -> float | np.ndarray:
+    """Signal t distribution"""
     return np.exp(- t / tau) / tau
 
 t_sig_max = t_sig(t_min, t_true)
 
 def t_bkg(t: float | np.ndarray, tau: float=t_false) -> float | np.ndarray:
+    """Background t distribution"""
     return np.exp(- t / tau) / tau
 
 t_bkg_max = t_bkg(t_min, t_false)
 
 def g_sig(g: float | np.ndarray, sigma: float=g_true) -> float | np.ndarray:
+    """Signal g distribution"""
     return np.exp(-0.5 * g**2 / sigma**2) / (np.sqrt(2 * np.pi) * sigma)
 
 g_sig_max = g_sig(0, g_true)
 
 def g_bkg(g: float | np.ndarray, sigma: float=t_false) -> float | np.ndarray:
+    """Background g distribution"""
     return np.exp(-0.5 * g**2 / sigma**2) / (np.sqrt(2 * np.pi) * sigma)
 
 g_bkg_max = g_bkg(0, g_false)
 
 
-
+# Functions to generate signal and background events
 def gen_sig(n: int = 10_000) -> list:
+    """Generate signal events"""
     with Progress(transient=True) as progress:
         m_task = progress.add_task("Generating Signal (mass)", total=n)
         w_task = progress.add_task("Generating Signal (costheta, phi)", total=n)
@@ -134,6 +169,7 @@ def gen_sig(n: int = 10_000) -> list:
         return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
 
 def gen_bkg(n: int = 10_000) -> list:
+    """Generate background events"""
     with Progress(transient=True) as progress:
         m_task = progress.add_task("Generating Background (mass)", total=n)
         w_task = progress.add_task("Generating Background (costheta, phi)", total=n)
@@ -168,11 +204,78 @@ def gen_bkg(n: int = 10_000) -> list:
                 progress.advance(g_task)
         return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
 
-def k_nearest_neighbors(x, k=100):
+# Functions to parallelize the generation of signal and background events if producing a large sample
+def gen_sig_partial(args):
+    n, seed = args  # Unpack arguments
+    rng = np.random.default_rng(seed)  # Ensure a different seed for each process
+
+    ms, costhetas, phis, ts, gs = [], [], [], [], []
+    while len(ms) < n:
+        m_star = rng.uniform(m_min, m_max)
+        if m_sig(m_star) >= rng.uniform(0, m_sig_max):
+            ms.append(m_star)
+            costheta_star = rng.uniform(-1, 1)
+            phi_star = rng.uniform(-np.pi, np.pi)
+            t_star = rng.uniform(t_min, t_max) 
+            g_star = rng.uniform(g_min, g_max) 
+            costhetas.append(costheta_star)
+            phis.append(phi_star)
+            ts.append(t_star)
+            gs.append(g_star)
+
+    return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
+
+def gen_sig_parallel(n=10000, num_workers=4):
+    events_per_worker = n // num_workers
+    seeds = np.random.randint(0, 100000, size=num_workers)  # Generate unique seeds for each worker
+
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        futures = [executor.submit(gen_sig_partial, (events_per_worker, seed)) for seed in seeds]
+        results = []
+        for future in futures:
+            results.extend(future.result())
+            
+    return results
+
+def gen_bkg_partial(args):
+    n, seed = args  # Unpack arguments
+    rng = np.random.default_rng(seed)  # Ensure a different seed for each process
+
+    ms, costhetas, phis, ts, gs = [], [], [], [], []
+    while len(ms) < n:
+        m_star = rng.uniform(m_min, m_max)
+        if m_bkg(m_star, b_true) >= rng.uniform(0, m_bkg_max):  # Assuming m_bkg and m_bkg_max are defined
+            ms.append(m_star)
+            costheta_star = rng.uniform(-1, 1)
+            phi_star = rng.uniform(-np.pi, np.pi)
+            t_star = rng.uniform(t_min, t_max)  # Assuming t_min and t_max are defined
+            g_star = rng.uniform(g_min, g_max)  # Assuming g_min and g_max are defined
+            costhetas.append(costheta_star)
+            phis.append(phi_star)
+            ts.append(t_star)
+            gs.append(g_star)
+
+    return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
+
+def gen_bkg_parallel(n=10000, num_workers=4):
+    events_per_worker = n // num_workers
+    seeds = np.random.randint(0, 100000, size=num_workers)  # Generate unique seeds for each worker
+
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        futures = [executor.submit(gen_bkg_partial, (events_per_worker, seed)) for seed in seeds]
+        results = []
+        for future in futures:
+            results.extend(future.result())
+
+    return results
+
+# Calculate K-nearest neighbors for a given set of points
+def k_nearest_neighbors(x, k):
     neighbors = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree').fit(x)
     _, indices = neighbors.kneighbors(x)
-    return indices # includes the point itself + 100 nearest neighbors
+    return indices  # includes the point itself + k nearest neighbors
 
+# Define a class for weighted unbinned negative log-likelihood calculation
 class WeightedUnbinnedNLL:
     @staticmethod
     def _safe_log(y: np.ndarray) -> np.ndarray:
@@ -180,6 +283,7 @@ class WeightedUnbinnedNLL:
 
     @staticmethod
     def _unbinned_nll_weighted(y: np.ndarray, w: np.ndarray) -> np.ndarray:
+        """Calculate the weighted unbinned negative log-likelihood"""
         return -np.sum(w * WeightedUnbinnedNLL._safe_log(y))
 
     def __init__(self, data: np.ndarray, model, weights: np.ndarray | None=None):
@@ -190,14 +294,17 @@ class WeightedUnbinnedNLL:
         self.model = model
 
     def __call__(self, params, *args) -> float:
+        """Evaluate the weighted unbinned NLL for given parameters"""
         y = self.model(self.data, *params, *args)
         if np.any(y < 0):
             return 1e20 # temporary fix...
         return WeightedUnbinnedNLL._unbinned_nll_weighted(y, self.weights)
 
     def fit(self, p0: list[float], *args, **kwargs):
+        """Perform minimization to find the best-fit parameters"""
         return opt.minimize(lambda x, *args: self.__call__(x, *args), p0, **kwargs)
 
+# Functions to plot event distributions and fits
 def plot_events(events: list[Event], signal_events: list[Event], weights: np.ndarray | None = None, filename='events.png'):
     ms = [e.mass for e in events]
     costhetas = [e.costheta for e in events]
@@ -362,116 +469,13 @@ def calculate_inplot(events: list[Event]) -> np.ndarray:
     return np.array(inplot_weights)
 
 
-def calculate_q_factors(events: list[Event]) -> np.ndarray:
-    ms = np.array([e.mass for e in events])
-    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi)] for e in events])
-
-    with console.status("Calculating K-Nearest Neighbors"):
-        knn = k_nearest_neighbors(phase_space)
-
-    def model(m: np.ndarray, z, b) -> np.ndarray:
-        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
-
-    def inplot(m, z, b) -> float:
-        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
-
-    q_factors = []
-    for i in track(range(len(events)), description="Calculating Q-Factors"):
-        c = cost.UnbinnedNLL(ms[knn[i]], model)
-        # 100% signal starting condition
-        m_1 = Minuit(c, z=1.0, b=b_true)
-        m_1.limits['z'] = (0, 1)
-        m_1.migrad()
-        # 100% background starting condition
-        m_2 = Minuit(c, z=0.0, b=b_true)
-        m_2.limits['z'] = (0, 1)
-        m_2.migrad()
-        # 50% signal / 50% background starting condition
-        m_3 = Minuit(c, z=0.5, b=b_true)
-        m_3.limits['z'] = (0, 1)
-        m_3.migrad()
-        fits = [m_1, m_2, m_3]
-        nlls = np.array([m.fval for m in fits])
-        best_fit = fits[np.argmin(nlls)]
-        q_factors.append(inplot(ms[i], *best_fit.values))
-    return np.array(q_factors)
-
-def calculate_q_factors_with_t(events: list[Event]) -> np.ndarray:
-    ms = np.array([e.mass for e in events])
-    phase_space = np.array([[e.costheta, e.phi, e.t] for e in events])
-    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.t - t_min) / (t_max - t_min)] for e in events])
-
-    with console.status("Calculating K-Nearest Neighbors"):
-        knn = k_nearest_neighbors(phase_space)
-
-    def model(m: np.ndarray, z, b) -> np.ndarray:
-        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
-
-    def inplot(m, z, b) -> float:
-        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
-
-    q_factors = []
-    for i in track(range(len(events)), description="Calculating Q-Factors"):
-        c = cost.UnbinnedNLL(ms[knn[i]], model)
-        # 100% signal starting condition
-        m_1 = Minuit(c, z=1.0, b=b_true)
-        m_1.limits['z'] = (0, 1)
-        m_1.migrad()
-        # 100% background starting condition
-        m_2 = Minuit(c, z=0.0, b=b_true)
-        m_2.limits['z'] = (0, 1)
-        m_2.migrad()
-        # 50% signal / 50% background starting condition
-        m_3 = Minuit(c, z=0.5, b=b_true)
-        m_3.limits['z'] = (0, 1)
-        m_3.migrad()
-        fits = [m_1, m_2, m_3]
-        nlls = np.array([m.fval for m in fits])
-        best_fit = fits[np.argmin(nlls)]
-        q_factors.append(inplot(ms[i], *best_fit.values))
-    return np.array(q_factors)
-
-def calculate_q_factors_with_g(events: list[Event]) -> np.ndarray:
-    ms = np.array([e.mass for e in events])
-    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.g - g_min) / (g_max - g_min)] for e in events])
-
-    with console.status("Calculating K-Nearest Neighbors"):
-        knn = k_nearest_neighbors(phase_space)
-
-    def model(m: np.ndarray, z, b) -> np.ndarray:
-        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
-
-    def inplot(m, z, b) -> float:
-        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
-
-    q_factors = []
-    for i in track(range(len(events)), description="Calculating Q-Factors"):
-        c = cost.UnbinnedNLL(ms[knn[i]], model)
-        # 100% signal starting condition
-        m_1 = Minuit(c, z=1.0, b=b_true)
-        m_1.limits['z'] = (0, 1)
-        m_1.migrad()
-        # 100% background starting condition
-        m_2 = Minuit(c, z=0.0, b=b_true)
-        m_2.limits['z'] = (0, 1)
-        m_2.migrad()
-        # 50% signal / 50% background starting condition
-        m_3 = Minuit(c, z=0.5, b=b_true)
-        m_3.limits['z'] = (0, 1)
-        m_3.migrad()
-        fits = [m_1, m_2, m_3]
-        nlls = np.array([m.fval for m in fits])
-        best_fit = fits[np.argmin(nlls)]
-        q_factors.append(inplot(ms[i], *best_fit.values))
-    return np.array(q_factors)
-
-def calculate_q_factors_with_t_g(events: list[Event]) -> np.ndarray:
+def calculate_q_factors(events: list[Event], num_knn: int) -> np.ndarray:
     ms = np.array([e.mass for e in events])
     phase_space = np.array([[e.costheta, e.phi, e.t, e.g] for e in events])
     phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.t - t_min) / (t_max - t_min), (e.g - g_min) / (g_max - g_min)] for e in events])
 
     with console.status("Calculating K-Nearest Neighbors"):
-        knn = k_nearest_neighbors(phase_space)
+        knn = k_nearest_neighbors(phase_space, num_knn)
 
     def model(m: np.ndarray, z, b) -> np.ndarray:
         return z * m_sig(m) + (1 - z) * m_bkg(m, b)
@@ -500,45 +504,155 @@ def calculate_q_factors_with_t_g(events: list[Event]) -> np.ndarray:
         q_factors.append(inplot(ms[i], *best_fit.values))
     return np.array(q_factors)
 
-
-def calculate_splot_weights(events: list[Event]) -> np.ndarray:
+def calculate_q_factors_with_t(events: list[Event], num_knn: int) -> np.ndarray:
     ms = np.array([e.mass for e in events])
+    phase_space = np.array([[e.costheta, e.phi, e.t] for e in events])
+    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.t - t_min) / (t_max - t_min)] for e in events])
+
+    with console.status("Calculating K-Nearest Neighbors"):
+        knn = k_nearest_neighbors(phase_space, num_knn)
+
     def model(m: np.ndarray, z, b) -> np.ndarray:
         return z * m_sig(m) + (1 - z) * m_bkg(m, b)
 
+    def inplot(m, z, b) -> float:
+        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
+
+    q_factors = []
+    for i in track(range(len(events)), description="Calculating Q-Factors"):
+        c = cost.UnbinnedNLL(ms[knn[i]], model)
+        # 100% signal starting condition
+        m_1 = Minuit(c, z=1.0, b=b_true)
+        m_1.limits['z'] = (0, 1)
+        m_1.migrad()
+        # 100% background starting condition
+        m_2 = Minuit(c, z=0.0, b=b_true)
+        m_2.limits['z'] = (0, 1)
+        m_2.migrad()
+        # 50% signal / 50% background starting condition
+        m_3 = Minuit(c, z=0.5, b=b_true)
+        m_3.limits['z'] = (0, 1)
+        m_3.migrad()
+        fits = [m_1, m_2, m_3]
+        nlls = np.array([m.fval for m in fits])
+        best_fit = fits[np.argmin(nlls)]
+        q_factors.append(inplot(ms[i], *best_fit.values))
+    return np.array(q_factors)
+
+def calculate_q_factors_with_g(events: list[Event], num_knn: int) -> np.ndarray:
+    ms = np.array([e.mass for e in events])
+    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.g - g_min) / (g_max - g_min)] for e in events])
+
+    with console.status("Calculating K-Nearest Neighbors"):
+        knn = k_nearest_neighbors(phase_space, num_knn)
+
+    def model(m: np.ndarray, z, b) -> np.ndarray:
+        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
+
+    def inplot(m, z, b) -> float:
+        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
+
+    q_factors = []
+    for i in track(range(len(events)), description="Calculating Q-Factors"):
+        c = cost.UnbinnedNLL(ms[knn[i]], model)
+        # 100% signal starting condition
+        m_1 = Minuit(c, z=1.0, b=b_true)
+        m_1.limits['z'] = (0, 1)
+        m_1.migrad()
+        # 100% background starting condition
+        m_2 = Minuit(c, z=0.0, b=b_true)
+        m_2.limits['z'] = (0, 1)
+        m_2.migrad()
+        # 50% signal / 50% background starting condition
+        m_3 = Minuit(c, z=0.5, b=b_true)
+        m_3.limits['z'] = (0, 1)
+        m_3.migrad()
+        fits = [m_1, m_2, m_3]
+        nlls = np.array([m.fval for m in fits])
+        best_fit = fits[np.argmin(nlls)]
+        q_factors.append(inplot(ms[i], *best_fit.values))
+    return np.array(q_factors)
+
+def calculate_q_factors_with_t_g(events: list[Event], num_knn: int) -> np.ndarray:
+    ms = np.array([e.mass for e in events])
+    phase_space = np.array([[e.costheta, e.phi, e.t, e.g] for e in events])
+    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.t - t_min) / (t_max - t_min), (e.g - g_min) / (g_max - g_min)] for e in events])
+
+    with console.status("Calculating K-Nearest Neighbors"):
+        knn = k_nearest_neighbors(phase_space, num_knn)
+
+    def model(m: np.ndarray, z, b) -> np.ndarray:
+        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
+
+    def inplot(m, z, b) -> float:
+        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
+
+    q_factors = []
+    for i in track(range(len(events)), description="Calculating Q-Factors"):
+        c = cost.UnbinnedNLL(ms[knn[i]], model)
+        # 100% signal starting condition
+        m_1 = Minuit(c, z=1.0, b=b_true)
+        m_1.limits['z'] = (0, 1)
+        m_1.migrad()
+        # 100% background starting condition
+        m_2 = Minuit(c, z=0.0, b=b_true)
+        m_2.limits['z'] = (0, 1)
+        m_2.migrad()
+        # 50% signal / 50% background starting condition
+        m_3 = Minuit(c, z=0.5, b=b_true)
+        m_3.limits['z'] = (0, 1)
+        m_3.migrad()
+        fits = [m_1, m_2, m_3]
+        nlls = np.array([m.fval for m in fits])
+        best_fit = fits[np.argmin(nlls)]
+        q_factors.append(inplot(ms[i], *best_fit.values))
+    return np.array(q_factors)
+
+def calculate_splot_weights(events: list[Event], sig_frac_init=0.5, b_init=0.5) -> np.ndarray:
+    """Calculate sPlot weights for distinguishing signal from background"""
+    ms = np.array([e.mass for e in events])  # Extracting the mass values from events
+    
+    def model(m: np.ndarray, sig_frac, b) -> np.ndarray:
+        return sig_frac * m_sig(m) + (1 - sig_frac) * m_bkg(m, b)
+    
+    # Performing the fit
     c = cost.UnbinnedNLL(ms, model)
-    # 100% signal starting condition
-    m_1 = Minuit(c, z=1.0, b=b_true)
-    m_1.limits['z'] = (0, 1)
-    m_1.migrad()
-    # 100% background starting condition
-    m_2 = Minuit(c, z=0.0, b=b_true)
-    m_2.limits['z'] = (0, 1)
-    m_2.migrad()
-    # 50% signal / 50% background starting condition
-    m_3 = Minuit(c, z=0.5, b=b_true)
-    m_3.limits['z'] = (0, 1)
-    m_3.migrad()
-    fits = [m_1, m_2, m_3]
-    nlls = np.array([m.fval for m in fits])
-    best_fit = fits[np.argmin(nlls)]
-    n_sig = len(ms) * best_fit.values[0]
-    n_bkg = len(ms) * (1 - best_fit.values[0])
-    b = best_fit.values[1]
-    V_ss_inv = np.sum(np.array([m_sig(m) * m_sig(m) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms]), axis=0)
-    V_sb_inv = np.sum(np.array([m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms]), axis=0)
-    V_bb_inv = np.sum(np.array([m_bkg(m, b) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms]), axis=0)
+    mi = Minuit(c, sig_frac=sig_frac_init, b=b_init)
+    mi.limits["sig_frac"] = (0, 1)  # Ensuring physical bounds
+    mi.limits["b"] = (0, 1)
+    mi.migrad()  
+    
+    # Extract fit results for signal and background contributions
+    n_sig = len(events) * mi.values["sig_frac"]
+    n_bkg = len(events) * (1 - mi.values["sig_frac"])
+    b = mi.values["b"]
+    
+    # Calculating inverse variance matrix elements
+    V_ss_inv = np.sum([m_sig(m)**2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms])
+    V_sb_inv = np.sum([m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms])
+    V_bb_inv = np.sum([m_bkg(m, b)**2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms])
     Vmat_inv = np.array([[V_ss_inv, V_sb_inv], [V_sb_inv, V_bb_inv]])
     V = np.linalg.inv(Vmat_inv)
-    return np.array([(V[0, 0] * m_sig(m) + V[0, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) for m in ms])
+    
+    # Calculate sWeights and bWeights for each event
+    sweights = [(V[0, 0] * m_sig(m) + V[0, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) for m in ms]
+    bweights = [(V[1, 0] * m_sig(m) + V[1, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) for m in ms]
+    
+    # Combine sweights and bweights into a two-dimensional array
+    combined_weights = np.vstack((sweights, bweights)).T  # Transpose to get the correct shape
+    
+    return combined_weights
 
 
-def calculate_sq_factors(events: list[Event]) -> np.ndarray:
+def calculate_sq_factors(events: list[Event], num_knn: int) -> np.ndarray:
+    """Calculate sQ-factors for events, a variant of Q-factors and sPlot methods that is able to handle
+    correlations in data"""
+
     ms = np.array([e.mass for e in events])
     phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi)] for e in events])
 
     with console.status("Calculating K-Nearest Neighbors"):
-        knn = k_nearest_neighbors(phase_space)
+        knn = k_nearest_neighbors(phase_space, num_knn)
 
     def model(m: np.ndarray, z, b) -> np.ndarray:
         return z * m_sig(m) + (1 - z) * m_bkg(m, b)
@@ -576,6 +690,8 @@ def calculate_sq_factors(events: list[Event]) -> np.ndarray:
     return np.array(sq_factors)
 
 def fit_angles(events: list[Event], weights: np.ndarray | None = None, p00_init: float=p00_true, p1n1_init: float=p1n1_true, p10_init: float=p10_true):
+    """Perform a weighted fit to the angular distribution of events to estimate the physics parameters
+    p00, p1n1, and p10"""
     def model(angles: np.ndarray, p00: float, p1n1: float, p10: float) -> np.ndarray:
         return w_sig(angles[:, 0], angles[:, 1], p00, p1n1, p10)
 
@@ -584,31 +700,110 @@ def fit_angles(events: list[Event], weights: np.ndarray | None = None, p00_init:
     return wunll.fit([p00_true, p1n1_true, p10_true])
 
 def fit_t(events: list[Event], weights: np.ndarray | None = None, t_init: float=t_true):
+    """Perform a weighted fit to the t distribution of events to estimate the t parameter"""
     ts = np.array([e.t for e in events])
     wunll_t = WeightedUnbinnedNLL(ts, t_sig, weights=weights)
     return wunll_t.fit([t_true])
 
 def fit_g(events: list[Event], weights: np.ndarray | None = None, g_init: float=g_true):
+    """Perform a weighted fit to the g distribution of events to estimate the g parameter"""
     gs = np.array([e.g for e in events])
     wunll_g = WeightedUnbinnedNLL(gs, g_sig, weights=weights)
     return wunll_g.fit([g_true])
 
+def plot_fit_for_event_and_neighbors(event_index, events_all, qfactor_type='q_factors'):
+    print(f"Plotting for {qfactor_type} event {event_index} ...")
+
+    # Prepare phase space data for KNN
+    phase_space_data = np.array([[event.costheta, event.phi] for event in events_all])
+    neighbors = NearestNeighbors(n_neighbors=101, algorithm='ball_tree').fit(phase_space_data)
+    distances, indices = neighbors.kneighbors(phase_space_data[event_index:event_index+1])
+
+    selected_indices = indices[0]  # Indices of the nearest neighbors
+    selected_masses = np.array([events_all[i].mass for i in selected_indices])
+
+    # Define the signal and background models separately
+    def signal(m, z):
+        return z * m_sig(m)  
+
+    def background(m, b):
+        return m_bkg(m, b)  
+
+    # Combined model for the fit
+    def model(m, z, b):
+        return signal(m, z) + (1 - z) * background(m, b)
+
+    c = cost.UnbinnedNLL(selected_masses, model)
+    m = Minuit(c, z=0.5, b=b_true)
+    m.limits['z'] = (0, 1)
+    m.migrad()
+
+    plt.figure(figsize=(10, 6))
+    # Scatter plot of selected masses
+    density, bins, _ = plt.hist(selected_masses, bins=30, alpha=0.7, label='Selected Events Masses', histtype='step', density=True)
+    bin_centers = 0.5 * (bins[1:] + bins[:-1])
+    plt.scatter(bin_centers, density, s=20, color='black', zorder=5, label='Data Points')
+
+    # Extract fitted parameters 
+    z_fit, b_fit = m.values["z"], m.values["b"]
+
+    # Plot fit components
+    m_range = np.linspace(m_min, m_max, 300)
+    plt.plot(m_range, [signal(m_val, z_fit) for m_val in m_range], 'c-', label='Signal Fit')
+    plt.plot(m_range, [(1 - z_fit) * background(m_val, b_fit) for m_val in m_range], 'r--', label='Background Fit')
+    plt.plot(m_range, [model(m_val, z_fit, b_fit) for m_val in m_range], 'm-', label='Total Fit')
+
+    plt.xlabel('Mass')
+    plt.ylabel('Density')
+    plt.title(f'Fit for Event {event_index} and its Nearest Neighbors')
+    plt.legend()
+    plt.show()
+
+def plot_splot_distribution(variable, weights, events_all, variable_name='Variable'):
+    print(f"Plotting for {variable_name} ...")
+    
+    variable_values = np.array([getattr(event, variable) for event in events_all])
+    
+    # Plot the weighted distribution
+    plt.figure(figsize=(10, 6))
+    plt.hist(variable_values, bins=50, weights=weights, alpha=0.7, label=variable_name, histtype='stepfilled')
+    plt.xlabel(variable_name)
+    plt.ylabel('Weighted Counts')
+    plt.title(f'sPlot Weighted Distribution of {variable_name}')
+    plt.legend()
+    plt.show()
 
 def main():
-    events_sig = gen_sig()
-    events_bkg = gen_bkg()
+    arguments = docopt(__doc__)
+
+    num_sig = int(arguments['--num-sig'])
+    num_bkg = int(arguments['--num-bkg'])
+    num_knn = int(arguments['--knn'])
+    mainplot = arguments['--plot']
+    qfactor_type = arguments['--qfactor-type']
+    plot_fits = arguments['--plot-fits']
+    plot_splot = arguments['--plot-splot']
+    splot_variable = arguments['--splot-variable']
+   
+    # Use num_sig and num_bkg in the event generation functions
+    events_sig = gen_sig(n=num_sig)
+    events_bkg = gen_bkg(n=num_bkg)
+
     with console.status("Plotting events"):
         plot_all_events(events_sig, events_bkg, filename="all_events.png")
     events_all = events_sig + events_bkg
 
     sideband_weights = calculate_sideband_weights(events_all)
-    inplot = calculate_inplot(events_all)
-    q_factors = calculate_q_factors(events_all)
-    q_factors_t = calculate_q_factors_with_t(events_all)
-    q_factors_g = calculate_q_factors_with_g(events_all)
-    q_factors_t_g = calculate_q_factors_with_t_g(events_all)
-    sweights = calculate_splot_weights(events_all)
-    sq_factors = calculate_sq_factors(events_all)
+    inplot_weights = calculate_inplot(events_all)
+    q_factors_weights = calculate_q_factors(events_all, num_knn)
+    q_factors_t_weights = calculate_q_factors_with_t(events_all, num_knn)
+    q_factors_g_weights = calculate_q_factors_with_g(events_all, num_knn)
+    q_factors_t_g_weights = calculate_q_factors_with_t_g(events_all, num_knn)
+    sweights = calculate_splot_weights(events_all)    
+    sq_factors_weights = calculate_sq_factors(events_all, num_knn)
+    
+    sweights_signal = sweights[:, 0]
+    sweights_bkg = sweights[:, 1]
 
     t = Table(title="Fit Results")
     t.add_column("Weighting Method")
@@ -640,46 +835,69 @@ def main():
 
     t.add_row("None", *get_results(events_all, weights=None))
     t.add_row("Sideband Subtraction", *get_results(events_all, weights=sideband_weights))
-    t.add_row("inPlot", *get_results(events_all, weights=inplot))
-    t.add_row("Q-Factors", *get_results(events_all, weights=q_factors))
-    t.add_row("Q-Factors (with t)", *get_results(events_all, weights=q_factors_t))
-    t.add_row("Q-Factors (with g)", *get_results(events_all, weights=q_factors_g))
-    t.add_row("Q-Factors (with t and g)", *get_results(events_all, weights=q_factors_t_g))
-    t.add_row("sWeights", *get_results(events_all, weights=sweights))
-    t.add_row("sQ-Factors", *get_results(events_all, weights=sq_factors))
-
+    t.add_row("inPlot", *get_results(events_all, weights=inplot_weights))
+    t.add_row("Q-Factors", *get_results(events_all, weights=q_factors_weights))
+    t.add_row("Q-Factors (with t)", *get_results(events_all, weights=q_factors_t_weights))
+    t.add_row("Q-Factors (with g)", *get_results(events_all, weights=q_factors_g_weights))
+    t.add_row("Q-Factors (with t and g)", *get_results(events_all, weights=q_factors_t_g_weights))
+    #t.add_row("sWeights", *get_results(events_all, weights=sweights))
+    t.add_row("sQ-Factors", *get_results(events_all, weights=sq_factors_weights))
+    
+    t.add_row("sWeights (Signal)", *get_results(events_all, weights=sweights_signal))
+    t.add_row("sWeights (Background)", *get_results(events_all, weights=sweights_bkg))
+    
     console.print(t)
 
-    plot_events(events_bkg, events_sig, weights=None, filename="bkg_no_weights.png")
-    plot_events(events_bkg, events_sig, weights=sideband_weights[10_000:], filename="bkg_sideband.png")
-    plot_events(events_bkg, events_sig, weights=inplot[10_000:], filename="bkg_inplot.png")
-    plot_events(events_bkg, events_sig, weights=q_factors[10_000:], filename="bkg_q_factor.png")
-    plot_events(events_bkg, events_sig, weights=q_factors_t[10_000:], filename="bkg_q_factor_t.png")
-    plot_events(events_bkg, events_sig, weights=q_factors_g[10_000:], filename="bkg_q_factor_g.png")
-    plot_events(events_bkg, events_sig, weights=q_factors_t_g[10_000:], filename="bkg_q_factor_t_g.png")
-    plot_events(events_bkg, events_sig, weights=sweights[10_000:], filename="bkg_sweight.png")
-    plot_events(events_bkg, events_sig, weights=sq_factors[10_000:], filename="bkg_sq_factor.png")
+    total_events = len(events_all)
+    total_sig_events = len(events_sig)  # Actual number of signal events generated
+    total_bkg_events = len(events_bkg)  # Actual number of background events generated
 
-    plot_events(events_sig, events_sig, weights=None, filename="sig_no_weights.png")
-    plot_events(events_sig, events_sig, weights=sideband_weights[:10_000], filename="sig_sideband.png")
-    plot_events(events_sig, events_sig, weights=inplot[10_000:], filename="sig_inplot.png")
-    plot_events(events_sig, events_sig, weights=q_factors[:10_000], filename="sig_q_factor.png")
-    plot_events(events_sig, events_sig, weights=q_factors_t[:10_000], filename="sig_q_factor_t.png")
-    plot_events(events_sig, events_sig, weights=q_factors_g[:10_000], filename="sig_q_factor_g.png")
-    plot_events(events_sig, events_sig, weights=q_factors_t_g[:10_000], filename="sig_q_factor_t_g.png")
-    plot_events(events_sig, events_sig, weights=sweights[:10_000], filename="sig_sweight.png")
-    plot_events(events_sig, events_sig, weights=sq_factors[:10_000], filename="sig_sq_factor.png")
+    if mainplot:
+        # Background Events Plotting
+        plot_events(events_bkg, events_sig, weights=None, filename="bkg_no_weights.png")
+        plot_events(events_bkg, events_sig, weights=sideband_weights[:total_bkg_events], filename="bkg_sideband.png")
+        plot_events(events_bkg, events_sig, weights=inplot_weights[:total_bkg_events], filename="bkg_inplot.png")
+        plot_events(events_bkg, events_sig, weights=q_factors_weights[:total_bkg_events], filename="bkg_q_factor.png")
+        plot_events(events_bkg, events_sig, weights=q_factors_t_weights[:total_bkg_events], filename="bkg_q_factor_t.png")
+        plot_events(events_bkg, events_sig, weights=q_factors_g_weights[:total_bkg_events], filename="bkg_q_factor_g.png")
+        plot_events(events_bkg, events_sig, weights=q_factors_t_g_weights[:total_bkg_events], filename="bkg_q_factor_t_g.png")
+        plot_events(events_bkg, events_sig, weights=sweights[:total_bkg_events], filename="bkg_sweight.png")
+        plot_events(events_bkg, events_sig, weights=sq_factors_weights[:total_bkg_events], filename="bkg_sq_factor.png")
 
-    plot_events(events_all, events_sig, weights=None, filename="all_no_weights.png")
-    plot_events(events_all, events_sig, weights=sideband_weights, filename="all_sideband.png")
-    plot_events(events_all, events_sig, weights=inplot, filename="all_inplot.png")
-    plot_events(events_all, events_sig, weights=q_factors, filename="all_q_factor.png")
-    plot_events(events_all, events_sig, weights=q_factors_t, filename="all_q_factor_t.png")
-    plot_events(events_all, events_sig, weights=q_factors_g, filename="all_q_factor_g.png")
-    plot_events(events_all, events_sig, weights=q_factors_t_g, filename="all_q_factor_t_g.png")
-    plot_events(events_all, events_sig, weights=sweights, filename="all_sweight.png")
-    plot_events(events_all, events_sig, weights=sq_factors, filename="all_sq_factor.png")
+        # Signal Events Plotting
+        plot_events(events_sig, events_sig, weights=None, filename="sig_no_weights.png")
+        plot_events(events_sig, events_sig, weights=sideband_weights[total_bkg_events:total_events], filename="sig_sideband.png")
+        plot_events(events_sig, events_sig, weights=inplot_weights[total_bkg_events:total_events], filename="sig_inplot.png")
+        plot_events(events_sig, events_sig, weights=q_factors_weights[total_bkg_events:total_events], filename="sig_q_factor.png")
+        plot_events(events_sig, events_sig, weights=q_factors_t_weights[total_bkg_events:total_events], filename="sig_q_factor_t.png")
+        plot_events(events_sig, events_sig, weights=q_factors_g_weights[total_bkg_events:total_events], filename="sig_q_factor_g.png")
+        plot_events(events_sig, events_sig, weights=q_factors_t_g_weights[total_bkg_events:total_events], filename="sig_q_factor_t_g.png")
+        plot_events(events_sig, events_sig, weights=sweights[total_bkg_events:total_events], filename="sig_sweight.png")
+        plot_events(events_sig, events_sig, weights=sq_factors_weights[total_bkg_events:total_events], filename="sig_sq_factor.png")
 
+        # Combined Events Plotting
+        plot_events(events_all, events_sig, weights=None, filename="all_no_weights.png")
+        plot_events(events_all, events_sig, weights=sideband_weights, filename="all_sideband.png")
+        plot_events(events_all, events_sig, weights=inplot_weights, filename="all_inplot.png")
+        plot_events(events_all, events_sig, weights=q_factors_weights, filename="all_q_factor.png")
+        plot_events(events_all, events_sig, weights=q_factors_t_weights, filename="all_q_factor_t.png")
+        plot_events(events_all, events_sig, weights=q_factors_g_weights, filename="all_q_factor_g.png")
+        plot_events(events_all, events_sig, weights=q_factors_t_g_weights, filename="all_q_factor_t_g.png")
+        plot_events(events_all, events_sig, weights=sweights, filename="all_sweight.png")
+        plot_events(events_all, events_sig, weights=sq_factors_weights, filename="all_sq_factor.png")
+
+    if plot_fits:
+        num_events_to_plot = 10
+        num_total_events = len(events_all)  # Assuming events_all is a list of all your events
+        random_indices = np.random.choice(range(num_total_events), size=num_events_to_plot, replace=False)
+
+        for event_index in random_indices:
+            plot_fit_for_event_and_neighbors(event_index, events_all, qfactor_type)
+
+    if plot_splot:
+        # Assume sweights are already calculated and available
+        plot_splot_distribution(splot_variable, sweights_signal, events_all, variable_name=f'{splot_variable.capitalize()} (Signal)')
+        plot_splot_distribution(splot_variable, sweights_bkg, events_all, variable_name=f'{splot_variable.capitalize()} (Background)')
 
 if __name__ == '__main__':
     main()
