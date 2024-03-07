@@ -3,15 +3,17 @@
 This script analyzes particle decay events by generating signal and background data, computing factors such as Q-factors and sPlot weights, and visualizing the data through plots and fits. The available options enable customization of the dataset size, plot types, and factor calculations.
 
 Usage:
-    analysis.py [--num-sig=<nsig>] [--num-bkg=<nbkg>] [--knn=<knn>] [--plot] [--qfactor-type=<qtype>] [--plot-fits] [--plot-splot] [--splot-variable=<var>]
+    analysis.py [--num-sig=<nsig>] [--num-bkg=<nbkg>] [--parallel] [--knn=<knn>] [--plot] [--qfactor-type=<qtype>] [--plot-fits] [--plot-splot] [--splot-variable=<var>]
 
 Options:
     -h --help               Show this screen.
     --num-sig=<nsig>        Number of signal events to generate. [default: 10000]
     --num-bkg=<nbkg>        Number of background events to generate. [default: 10000]
+    --parallel              Use parallel processing for event generation.
     --knn=<knn>             Number of nearest neighbors for kNN calculations. [default: 100]
     --plot                  Enable plotting for events with their appropriate weighting scheme.
-    --qfactor-type=<qtype>  Specify the type of factor calculation for plotting. Choose from q_factors, sq_factors, q_factors_t, q_factors_g, q_factors_t_g. [default: q_factors]
+    --qfactor-type=<qtype>  Specify the type of factor calculation for plotting. Choose from q_factors, sq_factors,
+                                                      q_factors_t, q_factors_g, q_factors_t_g. [default: q_factors]
     --plot-fits             Enable plotting of fits for random events.
     --plot-splot            Enable sPlot visualization for variable distributions.
     --splot-variable=<var>  The variable for which to plot the sPlot weighted distribution. [default: mass]
@@ -35,7 +37,7 @@ from rich.table import Table
 from scipy.integrate import quad
 from scipy.special import voigt_profile
 from sklearn.neighbors import NearestNeighbors
-
+from concurrent.futures import ProcessPoolExecutor
 from scipy.stats import norm
 from iminuit.cost import UnbinnedNLL   
 
@@ -205,68 +207,89 @@ def gen_bkg(n: int = 10_000) -> list:
         return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
 
 # Functions to parallelize the generation of signal and background events if producing a large sample
-def gen_sig_partial(args):
-    n, seed = args  # Unpack arguments
-    rng = np.random.default_rng(seed)  # Ensure a different seed for each process
+def gen_event_partial(n, seed):
+    rng = np.random.default_rng(seed)  # Initialize random seed for each process
 
-    ms, costhetas, phis, ts, gs = [], [], [], [], []
-    while len(ms) < n:
-        m_star = rng.uniform(m_min, m_max)
-        if m_sig(m_star) >= rng.uniform(0, m_sig_max):
-            ms.append(m_star)
+    events = []
+    for _ in range(n):
+        ms, costhetas, phis, ts, gs = [], [], [], [], []
+
+        # Generate mass
+        while len(ms) < 1:
+            m_star = rng.uniform(m_min, m_max)
+            if m_sig(m_star) >= rng.uniform(0, m_sig_max):
+                ms.append(m_star)
+
+        # Generate costheta and phi
+        while len(costhetas) < 1:
             costheta_star = rng.uniform(-1, 1)
             phi_star = rng.uniform(-np.pi, np.pi)
-            t_star = rng.uniform(t_min, t_max) 
-            g_star = rng.uniform(g_min, g_max) 
-            costhetas.append(costheta_star)
-            phis.append(phi_star)
-            ts.append(t_star)
-            gs.append(g_star)
+            if w_sig(costheta_star, phi_star) >= rng.uniform(0, w_sig_max):
+                costhetas.append(costheta_star)
+                phis.append(phi_star)
 
-    return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
+        # Generate t
+        while len(ts) < 1:
+            t_star = rng.uniform(t_min, t_max)
+            if t_sig(t_star) >= rng.uniform(0, t_sig_max):
+                ts.append(t_star)
 
-def gen_sig_parallel(n=10000, num_workers=4):
+        # Generate g
+        while len(gs) < 1:
+            g_star = rng.uniform(g_min, g_max)
+            if g_sig(g_star) >= rng.uniform(0, g_sig_max):
+                gs.append(g_star)
+
+        events.append(Event(ms[0], costhetas[0], phis[0], ts[0], gs[0]))
+
+    return events
+
+def gen_bkg_event_partial(n, seed):
+    rng = np.random.default_rng(seed)  
+
+    events = []
+    for _ in range(n):
+        ms, costhetas, phis, ts, gs = [], [], [], [], []
+
+        # Generate mass for background
+        while len(ms) < 1:
+            m_star = rng.uniform(m_min, m_max)
+            if m_bkg(m_star, b_true) >= rng.uniform(0, m_bkg_max):
+                ms.append(m_star)
+
+        # Generate costheta and phi for background
+        while len(costhetas) < 1:
+            costheta_star = rng.uniform(-1, 1)
+            phi_star = rng.uniform(-np.pi, np.pi)
+            if w_bkg(costheta_star, phi_star) >= rng.uniform(0, w_bkg_max):
+                costhetas.append(costheta_star)
+                phis.append(phi_star)
+
+        # Generate t for background
+        while len(ts) < 1:
+            t_star = rng.uniform(t_min, t_max)
+            if t_bkg(t_star, t_false) >= rng.uniform(0, t_bkg_max):
+                ts.append(t_star)
+
+        # Generate g for background
+        while len(gs) < 1:
+            g_star = rng.uniform(g_min, g_max)
+            if g_bkg(g_star, g_false) >= rng.uniform(0, g_bkg_max):
+                gs.append(g_star)
+
+        events.append(Event(ms[0], costhetas[0], phis[0], ts[0], gs[0]))
+
+    return events
+
+def parallel_event_generation(gen_function, n=10000, num_workers=4):
     events_per_worker = n // num_workers
-    seeds = np.random.randint(0, 100000, size=num_workers)  # Generate unique seeds for each worker
+    seeds = np.random.randint(0, 100000, size=num_workers)  # Unique seeds for each worker
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        futures = [executor.submit(gen_sig_partial, (events_per_worker, seed)) for seed in seeds]
+        futures = [executor.submit(gen_function, events_per_worker, seed) for seed in seeds]
         results = []
         for future in futures:
             results.extend(future.result())
-            
-    return results
-
-def gen_bkg_partial(args):
-    n, seed = args  # Unpack arguments
-    rng = np.random.default_rng(seed)  # Ensure a different seed for each process
-
-    ms, costhetas, phis, ts, gs = [], [], [], [], []
-    while len(ms) < n:
-        m_star = rng.uniform(m_min, m_max)
-        if m_bkg(m_star, b_true) >= rng.uniform(0, m_bkg_max):  # Assuming m_bkg and m_bkg_max are defined
-            ms.append(m_star)
-            costheta_star = rng.uniform(-1, 1)
-            phi_star = rng.uniform(-np.pi, np.pi)
-            t_star = rng.uniform(t_min, t_max)  # Assuming t_min and t_max are defined
-            g_star = rng.uniform(g_min, g_max)  # Assuming g_min and g_max are defined
-            costhetas.append(costheta_star)
-            phis.append(phi_star)
-            ts.append(t_star)
-            gs.append(g_star)
-
-    return [Event(m, costheta, phi, t, g) for m, costheta, phi, t, g in zip(ms, costhetas, phis, ts, gs)]
-
-def gen_bkg_parallel(n=10000, num_workers=4):
-    events_per_worker = n // num_workers
-    seeds = np.random.randint(0, 100000, size=num_workers)  # Generate unique seeds for each worker
-
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        futures = [executor.submit(gen_bkg_partial, (events_per_worker, seed)) for seed in seeds]
-        results = []
-        for future in futures:
-            results.extend(future.result())
-
     return results
 
 # Calculate K-nearest neighbors for a given set of points
@@ -314,22 +337,35 @@ def plot_events(events: list[Event], signal_events: list[Event], weights: np.nda
     ms_sig = [e.mass for e in signal_events]
     ts_sig = [e.t for e in signal_events]
     gs_sig = [e.g for e in signal_events]
+    
+    # Check if weights is None and handle accordingly
+    if weights is not None:
+        weighted_hist = True
+    else:
+        print("Weights not provided. Plotting without weights.")
+        weighted_hist = False
+
     fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(6, 6))
-    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, label='Weighted')
-    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), histtype='step', label='Truth')
+    # Plotting code...
+    if weighted_hist:
+        ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, label='Weighted', color='gray')
+    else:
+        ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), label='Unweighted', color='gray')
+    
+    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), histtype='step', label='Truth', color='black', linewidth=1.5)
     ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[0, 0].set_ylabel(r"Counts / 0.002")
     ax[0, 0].legend(loc='upper right')
     ax[0, 1].hist2d(costhetas, phis, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], weights=weights)
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
-    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, label='Weighted')
-    ax[1, 0].hist(ts_sig, bins=100, range=(t_min, t_max), histtype='step', label='Truth')
+    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, label='Weighted', color='gray')
+    ax[1, 0].hist(ts_sig, bins=100, range=(t_min, t_max), histtype='step', label='Truth', color='black', linewidth=1.5)
     ax[1, 0].set_xlabel("$t$ (arb)")
     ax[1, 0].set_ylabel(r"Counts / 0.02")
     ax[1, 0].legend(loc='upper right')
-    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, label='Weighted')
-    ax[1, 1].hist(gs_sig, bins=100, range=(g_min, g_max), histtype='step', label='Truth')
+    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, label='Weighted', color='gray')
+    ax[1, 1].hist(gs_sig, bins=100, range=(g_min, g_max), histtype='step', label='Truth', color='black', linewidth=1.5)
     ax[1, 1].set_xlabel("$g$ (arb)")
     ax[1, 1].set_ylabel(r"Counts / 0.036")
     ax[1, 1].legend(loc='upper right')
@@ -351,52 +387,52 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(12, 9), sharey='col')
 
     # signal plots
-    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), label="signal")
+    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), label="signal", color='darkturquoise')
     ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[0, 0].set_ylabel(r"Counts / 0.002")
     ax[0, 0].legend(loc="upper right")
     ax[0, 1].hist2d(costhetas_sig, phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="signal")
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
-    ax[0, 2].hist(ts_sig, bins=100, range=(t_min, t_max), label="signal")
+    ax[0, 2].hist(ts_sig, bins=100, range=(t_min, t_max), label="signal", color='darkturquoise')
     ax[0, 2].set_xlabel("$t$ (arb)")
     ax[0, 2].set_ylabel(r"Counts / 0.02")
     ax[0, 2].legend(loc="upper right")
-    ax[0, 3].hist(gs_sig, bins=100, range=(g_min, g_max), label="signal")
+    ax[0, 3].hist(gs_sig, bins=100, range=(g_min, g_max), label="signal", color='darkturquoise')
     ax[0, 3].set_xlabel("$g$ (arb)")
     ax[0, 3].set_ylabel(r"Counts / 0.036")
     ax[0, 3].legend(loc="upper right")
 
     # background plots
-    ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), color='C1', label="background")
+    ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), label="background", color='red')
     ax[1, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[1, 0].set_ylabel(r"Counts / 0.002")
     ax[1, 0].legend(loc="upper right")
     ax[1, 1].hist2d(costhetas_bkg, phis_bkg, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="background")
     ax[1, 1].set_xlabel(r"$\cos(\theta)$")
     ax[1, 1].set_ylabel(r"$\phi$")
-    ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), color='C1', label="background")
+    ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), label="background", color='red')
     ax[1, 2].set_xlabel("$t$ (arb)")
     ax[1, 2].set_ylabel(r"Counts / 0.02")
     ax[1, 2].legend(loc="upper right")
-    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), color='C1', label="background")
+    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), label="background", color='red')
     ax[1, 3].set_xlabel("$g$ (arb)")
     ax[1, 3].set_ylabel(r"Counts / 0.036")
     ax[1, 3].legend(loc="upper right")
 
     # combined plots
-    ax[2, 0].hist([ms_bkg, ms_sig], bins=100, range=(m_min, m_max), stacked=True, color=['C1', 'C0'], label=["background", "signal"])
+    ax[2, 0].hist([ms_bkg, ms_sig], bins=100, range=(m_min, m_max), stacked=True, color=['red', 'darkturquoise'], label=["background", "signal"])
     ax[2, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[2, 0].set_ylabel(r"Counts / 0.002")
     ax[2, 0].legend(loc="upper right")
     ax[2, 1].hist2d(costhetas_bkg + costhetas_sig, phis_bkg + phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label=["background", "signal"])
     ax[2, 1].set_xlabel(r"$\cos(\theta)$")
     ax[2, 1].set_ylabel(r"$\phi$")
-    ax[2, 2].hist([ts_bkg, ts_sig], bins=100, range=(t_min, t_max), stacked=True, color=['C1', 'C0'], label=["background", "signal"])
+    ax[2, 2].hist([ts_bkg, ts_sig], bins=100, range=(t_min, t_max), stacked=True, color=['red', 'darkturquoise'], label=["background", "signal"])
     ax[2, 2].set_xlabel("$t$ (arb)")
     ax[2, 2].set_ylabel(r"Counts / 0.02")
     ax[2, 2].legend(loc="upper right")
-    ax[2, 3].hist([gs_bkg, gs_sig], bins=100, range=(g_min, g_max), stacked=True, color=['C1', 'C0'], label=["background", "signal"])
+    ax[2, 3].hist([gs_bkg, gs_sig], bins=100, range=(g_min, g_max), stacked=True, color=['red', 'darkturquoise'], label=["background", "signal"])
     ax[2, 3].set_xlabel("$g$ (arb)")
     ax[2, 3].set_ylabel(r"Counts / 0.036")
     ax[2, 3].legend(loc="upper right")
@@ -627,7 +663,7 @@ def calculate_splot_weights(events: list[Event], sig_frac_init=0.5, b_init=0.5) 
     n_bkg = len(events) * (1 - mi.values["sig_frac"])
     b = mi.values["b"]
     
-    # Calculating inverse variance matrix elements
+    # Calculate inverse variance matrix elements
     V_ss_inv = np.sum([m_sig(m)**2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms])
     V_sb_inv = np.sum([m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms])
     V_bb_inv = np.sum([m_bkg(m, b)**2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms])
@@ -779,16 +815,24 @@ def main():
     num_sig = int(arguments['--num-sig'])
     num_bkg = int(arguments['--num-bkg'])
     num_knn = int(arguments['--knn'])
+    parallel = arguments['--parallel']
     mainplot = arguments['--plot']
     qfactor_type = arguments['--qfactor-type']
     plot_fits = arguments['--plot-fits']
     plot_splot = arguments['--plot-splot']
     splot_variable = arguments['--splot-variable']
-   
-    # Use num_sig and num_bkg in the event generation functions
-    events_sig = gen_sig(n=num_sig)
-    events_bkg = gen_bkg(n=num_bkg)
 
+    if parallel:
+        # Generate events in parallel.
+        console.print("Generating signal and background events in parallel ...")
+        events_sig = parallel_event_generation(gen_event_partial, n=num_sig, num_workers=4)
+        events_bkg = parallel_event_generation(gen_bkg_event_partial, n=num_bkg, num_workers=4)
+    else:
+        # Default to sequential generation.
+        console.print("Generating signal and background events sequentially ...")
+        events_sig = gen_sig(n=num_sig)
+        events_bkg = gen_bkg(n=num_bkg)
+   
     with console.status("Plotting events"):
         plot_all_events(events_sig, events_bkg, filename="all_events.png")
     events_all = events_sig + events_bkg
@@ -801,9 +845,11 @@ def main():
     q_factors_t_g_weights = calculate_q_factors_with_t_g(events_all, num_knn)
     sweights = calculate_splot_weights(events_all)    
     sq_factors_weights = calculate_sq_factors(events_all, num_knn)
-    
+   
+    # sweights now a 2D array to separate into signal and background 
     sweights_signal = sweights[:, 0]
     sweights_bkg = sweights[:, 1]
+    combined_sweights = sweights_signal + sweights_bkg
 
     t = Table(title="Fit Results")
     t.add_column("Weighting Method")
@@ -861,7 +907,7 @@ def main():
         plot_events(events_bkg, events_sig, weights=q_factors_t_weights[:total_bkg_events], filename="bkg_q_factor_t.png")
         plot_events(events_bkg, events_sig, weights=q_factors_g_weights[:total_bkg_events], filename="bkg_q_factor_g.png")
         plot_events(events_bkg, events_sig, weights=q_factors_t_g_weights[:total_bkg_events], filename="bkg_q_factor_t_g.png")
-        plot_events(events_bkg, events_sig, weights=sweights[:total_bkg_events], filename="bkg_sweight.png")
+        plot_events(events_bkg, events_sig, weights=sweights_bkg[:total_bkg_events], filename="bkg_sweight.png")
         plot_events(events_bkg, events_sig, weights=sq_factors_weights[:total_bkg_events], filename="bkg_sq_factor.png")
 
         # Signal Events Plotting
@@ -872,7 +918,7 @@ def main():
         plot_events(events_sig, events_sig, weights=q_factors_t_weights[total_bkg_events:total_events], filename="sig_q_factor_t.png")
         plot_events(events_sig, events_sig, weights=q_factors_g_weights[total_bkg_events:total_events], filename="sig_q_factor_g.png")
         plot_events(events_sig, events_sig, weights=q_factors_t_g_weights[total_bkg_events:total_events], filename="sig_q_factor_t_g.png")
-        plot_events(events_sig, events_sig, weights=sweights[total_bkg_events:total_events], filename="sig_sweight.png")
+        plot_events(events_sig, events_sig, weights=sweights_signal[total_bkg_events:total_events], filename="sig_sweight.png")
         plot_events(events_sig, events_sig, weights=sq_factors_weights[total_bkg_events:total_events], filename="sig_sq_factor.png")
 
         # Combined Events Plotting
@@ -883,19 +929,18 @@ def main():
         plot_events(events_all, events_sig, weights=q_factors_t_weights, filename="all_q_factor_t.png")
         plot_events(events_all, events_sig, weights=q_factors_g_weights, filename="all_q_factor_g.png")
         plot_events(events_all, events_sig, weights=q_factors_t_g_weights, filename="all_q_factor_t_g.png")
-        plot_events(events_all, events_sig, weights=sweights, filename="all_sweight.png")
+        plot_events(events_all, events_sig, weights=combined_sweights, filename="all_sweight.png")
         plot_events(events_all, events_sig, weights=sq_factors_weights, filename="all_sq_factor.png")
 
     if plot_fits:
         num_events_to_plot = 10
-        num_total_events = len(events_all)  # Assuming events_all is a list of all your events
+        num_total_events = len(events_all)  
         random_indices = np.random.choice(range(num_total_events), size=num_events_to_plot, replace=False)
 
         for event_index in random_indices:
             plot_fit_for_event_and_neighbors(event_index, events_all, qfactor_type)
 
-    if plot_splot:
-        # Assume sweights are already calculated and available
+    if plot_splot: 
         plot_splot_distribution(splot_variable, sweights_signal, events_all, variable_name=f'{splot_variable.capitalize()} (Signal)')
         plot_splot_distribution(splot_variable, sweights_bkg, events_all, variable_name=f'{splot_variable.capitalize()} (Background)')
 
