@@ -332,9 +332,39 @@ def calculate_sideband_weights(events: list[Event]) -> np.ndarray:
     weights[mask_sidebands] = - center_area / (left_area + right_area)
     return weights
 
+def calculate_inplot(events: list[Event]) -> np.ndarray:
+    ms = np.array([e.mass for e in events])
+
+    def model(m: np.ndarray, z, b) -> np.ndarray:
+        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
+
+    def inplot(m: np.ndarray, z, b) -> np.ndarray:
+        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
+
+    inplot_weights = []
+    c = cost.UnbinnedNLL(ms, model)
+    # 100% signal starting condition
+    m_1 = Minuit(c, z=1.0, b=b_true)
+    m_1.limits['z'] = (0, 1)
+    m_1.migrad()
+    # 100% background starting condition
+    m_2 = Minuit(c, z=0.0, b=b_true)
+    m_2.limits['z'] = (0, 1)
+    m_2.migrad()
+    # 50% signal / 50% background starting condition
+    m_3 = Minuit(c, z=0.5, b=b_true)
+    m_3.limits['z'] = (0, 1)
+    m_3.migrad()
+    fits = [m_1, m_2, m_3]
+    nlls = np.array([m.fval for m in fits])
+    best_fit = fits[np.argmin(nlls)]
+    inplot_weights = inplot(ms, *best_fit.values)
+    return np.array(inplot_weights)
+
+
 def calculate_q_factors(events: list[Event]) -> np.ndarray:
     ms = np.array([e.mass for e in events])
-    phase_space = np.array([[e.costheta, e.phi] for e in events])
+    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi)] for e in events])
 
     with console.status("Calculating K-Nearest Neighbors"):
         knn = k_nearest_neighbors(phase_space)
@@ -369,6 +399,7 @@ def calculate_q_factors(events: list[Event]) -> np.ndarray:
 def calculate_q_factors_with_t(events: list[Event]) -> np.ndarray:
     ms = np.array([e.mass for e in events])
     phase_space = np.array([[e.costheta, e.phi, e.t] for e in events])
+    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.t - t_min) / (t_max - t_min)] for e in events])
 
     with console.status("Calculating K-Nearest Neighbors"):
         knn = k_nearest_neighbors(phase_space)
@@ -402,7 +433,7 @@ def calculate_q_factors_with_t(events: list[Event]) -> np.ndarray:
 
 def calculate_q_factors_with_g(events: list[Event]) -> np.ndarray:
     ms = np.array([e.mass for e in events])
-    phase_space = np.array([[e.costheta, e.phi, e.g] for e in events])
+    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.g - g_min) / (g_max - g_min)] for e in events])
 
     with console.status("Calculating K-Nearest Neighbors"):
         knn = k_nearest_neighbors(phase_space)
@@ -437,6 +468,7 @@ def calculate_q_factors_with_g(events: list[Event]) -> np.ndarray:
 def calculate_q_factors_with_t_g(events: list[Event]) -> np.ndarray:
     ms = np.array([e.mass for e in events])
     phase_space = np.array([[e.costheta, e.phi, e.t, e.g] for e in events])
+    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi), (e.t - t_min) / (t_max - t_min), (e.g - g_min) / (g_max - g_min)] for e in events])
 
     with console.status("Calculating K-Nearest Neighbors"):
         knn = k_nearest_neighbors(phase_space)
@@ -503,7 +535,7 @@ def calculate_splot_weights(events: list[Event]) -> np.ndarray:
 
 def calculate_sq_factors(events: list[Event]) -> np.ndarray:
     ms = np.array([e.mass for e in events])
-    phase_space = np.array([[e.costheta, e.phi] for e in events])
+    phase_space = np.array([[(e.costheta + 1) / 2, (e.phi + np.pi) / (2 * np.pi)] for e in events])
 
     with console.status("Calculating K-Nearest Neighbors"):
         knn = k_nearest_neighbors(phase_space)
@@ -570,6 +602,7 @@ def main():
     events_all = events_sig + events_bkg
 
     sideband_weights = calculate_sideband_weights(events_all)
+    inplot = calculate_inplot(events_all)
     q_factors = calculate_q_factors(events_all)
     q_factors_t = calculate_q_factors_with_t(events_all)
     q_factors_g = calculate_q_factors_with_g(events_all)
@@ -607,6 +640,7 @@ def main():
 
     t.add_row("None", *get_results(events_all, weights=None))
     t.add_row("Sideband Subtraction", *get_results(events_all, weights=sideband_weights))
+    t.add_row("inPlot", *get_results(events_all, weights=inplot))
     t.add_row("Q-Factors", *get_results(events_all, weights=q_factors))
     t.add_row("Q-Factors (with t)", *get_results(events_all, weights=q_factors_t))
     t.add_row("Q-Factors (with g)", *get_results(events_all, weights=q_factors_g))
@@ -618,6 +652,7 @@ def main():
 
     plot_events(events_bkg, events_sig, weights=None, filename="bkg_no_weights.png")
     plot_events(events_bkg, events_sig, weights=sideband_weights[10_000:], filename="bkg_sideband.png")
+    plot_events(events_bkg, events_sig, weights=inplot[10_000:], filename="bkg_inplot.png")
     plot_events(events_bkg, events_sig, weights=q_factors[10_000:], filename="bkg_q_factor.png")
     plot_events(events_bkg, events_sig, weights=q_factors_t[10_000:], filename="bkg_q_factor_t.png")
     plot_events(events_bkg, events_sig, weights=q_factors_g[10_000:], filename="bkg_q_factor_g.png")
@@ -627,6 +662,7 @@ def main():
 
     plot_events(events_sig, events_sig, weights=None, filename="sig_no_weights.png")
     plot_events(events_sig, events_sig, weights=sideband_weights[:10_000], filename="sig_sideband.png")
+    plot_events(events_sig, events_sig, weights=inplot[10_000:], filename="sig_inplot.png")
     plot_events(events_sig, events_sig, weights=q_factors[:10_000], filename="sig_q_factor.png")
     plot_events(events_sig, events_sig, weights=q_factors_t[:10_000], filename="sig_q_factor_t.png")
     plot_events(events_sig, events_sig, weights=q_factors_g[:10_000], filename="sig_q_factor_g.png")
@@ -636,6 +672,7 @@ def main():
 
     plot_events(events_all, events_sig, weights=None, filename="all_no_weights.png")
     plot_events(events_all, events_sig, weights=sideband_weights, filename="all_sideband.png")
+    plot_events(events_all, events_sig, weights=inplot, filename="all_inplot.png")
     plot_events(events_all, events_sig, weights=q_factors, filename="all_q_factor.png")
     plot_events(events_all, events_sig, weights=q_factors_t, filename="all_q_factor_t.png")
     plot_events(events_all, events_sig, weights=q_factors_g, filename="all_q_factor_g.png")
