@@ -11,13 +11,13 @@ This Python program contains a simple analysis and comparison of multiple statis
 This analysis is part of an ongoing project which will eventually be published, please don't scoop me, I'll know it and raise hell :)
 
 # References
-[^1] M. Pivk and F.R. Le Diberder. “sPlot: A statistical tool to unfold data
+[^1]: M. Pivk and F.R. Le Diberder. “sPlot: A statistical tool to unfold data
 distributions”. In: Nuclear Instruments and Methods in Physics Research
 Section A: Accelerators, Spectrometers, Detectors and Associated Equip-
 ment 555 (1-2 Dec. 2005), pp. 356–369. issn: 01689002. doi: 10.1016/j.
 nima.2005.08.106.
 
-[^2] M Williams, M Bellis, and C A Meyer. “Multivariate side-band subtraction
+[^2]: M Williams, M Bellis, and C A Meyer. “Multivariate side-band subtraction
 using probabilistic event weights”. In: Journal of Instrumentation 4 (10
 Oct. 2009), P10003–P10003. issn: 1748-0221. doi: 10.1088/1748- 0221/
 4/10/P10003.
