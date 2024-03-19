@@ -25,6 +25,7 @@ import numpy as np
 import scipy.optimize as opt
 from docopt import docopt
 from iminuit import Minuit, cost
+from matplotlib.colors import LinearSegmentedColormap
 from rich.console import Console
 from rich.progress import Progress, track
 from rich.table import Table
@@ -62,6 +63,11 @@ BLACK = "#000000"
 GRAY = "#BBBBBB"
 MAGENTA = "#EE3377"
 RED = "#CC3311"
+# colors = [(136, 46, 114), (25, 101, 176), (82, 137, 199), (123, 175, 222), (78, 178, 101), (144, 201, 135), (202, 224, 171), (247, 240, 86), (246, 193, 65), (241, 147, 45), (232, 96, 28), (220, 5, 12)]
+# colors = [(r / 255, g / 255, b / 255) for r, g, b in colors]
+# CMAP = LinearSegmentedColormap.from_list("analysis", colors, N=1000)
+CMAP = 'viridis'
+
 
 # Define an Event namedtuple for easy handling of data
 class Event(NamedTuple):
@@ -345,7 +351,7 @@ def plot_events(events: list[Event], signal_events: list[Event], weights: np.nda
     ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[0, 0].set_ylabel(r"Counts / 0.002")
     ax[0, 0].legend(loc='upper right')
-    ax[0, 1].hist2d(costhetas, phis, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], weights=weights)
+    ax[0, 1].hist2d(costhetas, phis, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], weights=weights, cmap=CMAP)
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
     nw, bw, _ = ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, label=weights_label, color=GRAY)
@@ -382,7 +388,7 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[0, 0].set_ylabel(r"Counts / 0.002")
     ax[0, 0].legend(loc="upper right")
-    ax[0, 1].hist2d(costhetas_sig, phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="signal")
+    ax[0, 1].hist2d(costhetas_sig, phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="signal", cmap=CMAP)
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
     ax[0, 2].hist(ts_sig, bins=100, range=(t_min, t_max), label="signal", color=BLUE)
@@ -399,7 +405,7 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[1, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[1, 0].set_ylabel(r"Counts / 0.002")
     ax[1, 0].legend(loc="upper right")
-    ax[1, 1].hist2d(costhetas_bkg, phis_bkg, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="background")
+    ax[1, 1].hist2d(costhetas_bkg, phis_bkg, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="background", cmap=CMAP)
     ax[1, 1].set_xlabel(r"$\cos(\theta)$")
     ax[1, 1].set_ylabel(r"$\phi$")
     ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), label="background", color=ORANGE)
@@ -416,7 +422,7 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[2, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[2, 0].set_ylabel(r"Counts / 0.002")
     ax[2, 0].legend(loc="upper right")
-    ax[2, 1].hist2d(costhetas_bkg + costhetas_sig, phis_bkg + phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label=["background", "signal"])
+    ax[2, 1].hist2d(costhetas_bkg + costhetas_sig, phis_bkg + phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], cmap=CMAP)
     ax[2, 1].set_xlabel(r"$\cos(\theta)$")
     ax[2, 1].set_ylabel(r"$\phi$")
     ax[2, 2].hist([ts_bkg, ts_sig], bins=100, range=(t_min, t_max), stacked=True, color=[ORANGE, BLUE], label=["background", "signal"])
