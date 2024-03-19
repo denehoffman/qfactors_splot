@@ -346,6 +346,7 @@ def plot_events(events: list[Event], signal_events: list[Event], weights: np.nda
     weights_label = 'Unweighted' if weights is None else 'Weighted'
 
     nw, bw, _ = ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, label=weights_label, color=GRAY)
+    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, histtype='step', color=RED)
     nt, bt, _ = ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), histtype='step', label='Truth', color='black', linewidth=1.5)
     # ax[0, 0].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
     ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
@@ -355,12 +356,14 @@ def plot_events(events: list[Event], signal_events: list[Event], weights: np.nda
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
     nw, bw, _ = ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, label=weights_label, color=GRAY)
+    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, histtype='step', color=RED)
     nt, bt, _ = ax[1, 0].hist(ts_sig, bins=100, range=(t_min, t_max), histtype='step', label='Truth', color='black', linewidth=1.5)
     # ax[1, 0].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
     ax[1, 0].set_xlabel("$t$ (arb)")
     ax[1, 0].set_ylabel(r"Counts / 0.02")
     ax[1, 0].legend(loc='upper right')
     nw, bw, _ = ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, label=weights_label, color=GRAY)
+    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, histtype='step', color=RED)
     nt, bt, _ = ax[1, 1].hist(gs_sig, bins=100, range=(g_min, g_max), histtype='step', label='Truth', color='black', linewidth=1.5)
     # ax[1, 1].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
     ax[1, 1].set_xlabel("$g$ (arb)")
