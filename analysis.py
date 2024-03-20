@@ -57,12 +57,13 @@ g_false = 0.56
 g_min = -1.8
 g_max = 1.8
 voigt_norm = quad(lambda x: voigt_profile((x - m_omega), sigma, m_omega * G_omega/2), m_min, m_max)
-ORANGE = "#EE7733"
-BLUE = "#0077BB"
-BLACK = "#000000"
-GRAY = "#BBBBBB"
-MAGENTA = "#EE3377"
 RED = "#CC3311"
+BLUE = "#0077BB"
+PURPLE = "#AA3377"
+BLACK = "#000000"
+PALE_GRAY = "#DDDDDD"
+DARK_GRAY = "#555555"
+ERROR_RED = "#CC3311"
 # colors = [(136, 46, 114), (25, 101, 176), (82, 137, 199), (123, 175, 222), (78, 178, 101), (144, 201, 135), (202, 224, 171), (247, 240, 86), (246, 193, 65), (241, 147, 45), (232, 96, 28), (220, 5, 12)]
 # colors = [(r / 255, g / 255, b / 255) for r, g, b in colors]
 # CMAP = LinearSegmentedColormap.from_list("analysis", colors, N=1000)
@@ -345,9 +346,9 @@ def plot_events(events: list[Event], signal_events: list[Event], weights: np.nda
     # Plotting code...
     weights_label = 'Unweighted' if weights is None else 'Weighted'
 
-    nw, bw, _ = ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, label=weights_label, color=GRAY)
-    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, histtype='step', color=RED)
-    nt, bt, _ = ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), histtype='step', label='Truth', color='black', linewidth=1.5)
+    nw, bw, _ = ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, label=weights_label, color=PALE_GRAY)
+    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, histtype='step', color=ERROR_RED)
+    nt, bt, _ = ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), histtype='step', label='Truth', color='black')
     # ax[0, 0].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
     ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[0, 0].set_ylabel(r"Counts / 0.002")
@@ -355,16 +356,16 @@ def plot_events(events: list[Event], signal_events: list[Event], weights: np.nda
     ax[0, 1].hist2d(costhetas, phis, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], weights=weights, cmap=CMAP)
     ax[0, 1].set_xlabel(r"$\cos(\theta)$")
     ax[0, 1].set_ylabel(r"$\phi$")
-    nw, bw, _ = ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, label=weights_label, color=GRAY)
-    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, histtype='step', color=RED)
-    nt, bt, _ = ax[1, 0].hist(ts_sig, bins=100, range=(t_min, t_max), histtype='step', label='Truth', color='black', linewidth=1.5)
+    nw, bw, _ = ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, label=weights_label, color=PALE_GRAY)
+    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, histtype='step', color=ERROR_RED)
+    nt, bt, _ = ax[1, 0].hist(ts_sig, bins=100, range=(t_min, t_max), histtype='step', label='Truth', color='black')
     # ax[1, 0].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
     ax[1, 0].set_xlabel("$t$ (arb)")
     ax[1, 0].set_ylabel(r"Counts / 0.02")
     ax[1, 0].legend(loc='upper right')
-    nw, bw, _ = ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, label=weights_label, color=GRAY)
-    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, histtype='step', color=RED)
-    nt, bt, _ = ax[1, 1].hist(gs_sig, bins=100, range=(g_min, g_max), histtype='step', label='Truth', color='black', linewidth=1.5)
+    nw, bw, _ = ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, label=weights_label, color=PALE_GRAY)
+    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, histtype='step', color=ERROR_RED)
+    nt, bt, _ = ax[1, 1].hist(gs_sig, bins=100, range=(g_min, g_max), histtype='step', label='Truth', color='black')
     # ax[1, 1].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
     ax[1, 1].set_xlabel("$g$ (arb)")
     ax[1, 1].set_ylabel(r"Counts / 0.036")
@@ -404,35 +405,35 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[0, 3].legend(loc="upper right")
 
     # background plots
-    ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), label="background", color=ORANGE)
+    ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), label="background", color=RED)
     ax[1, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[1, 0].set_ylabel(r"Counts / 0.002")
     ax[1, 0].legend(loc="upper right")
     ax[1, 1].hist2d(costhetas_bkg, phis_bkg, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="background", cmap=CMAP)
     ax[1, 1].set_xlabel(r"$\cos(\theta)$")
     ax[1, 1].set_ylabel(r"$\phi$")
-    ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), label="background", color=ORANGE)
+    ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), label="background", color=RED)
     ax[1, 2].set_xlabel("$t$ (arb)")
     ax[1, 2].set_ylabel(r"Counts / 0.02")
     ax[1, 2].legend(loc="upper right")
-    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), label="background", color=ORANGE)
+    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), label="background", color=RED)
     ax[1, 3].set_xlabel("$g$ (arb)")
     ax[1, 3].set_ylabel(r"Counts / 0.036")
     ax[1, 3].legend(loc="upper right")
 
     # combined plots
-    ax[2, 0].hist([ms_bkg, ms_sig], bins=100, range=(m_min, m_max), stacked=True, color=[ORANGE, BLUE], label=["background", "signal"])
+    ax[2, 0].hist([ms_bkg, ms_sig], bins=100, range=(m_min, m_max), stacked=True, color=[RED, BLUE], label=["background", "signal"])
     ax[2, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
     ax[2, 0].set_ylabel(r"Counts / 0.002")
     ax[2, 0].legend(loc="upper right")
     ax[2, 1].hist2d(costhetas_bkg + costhetas_sig, phis_bkg + phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], cmap=CMAP)
     ax[2, 1].set_xlabel(r"$\cos(\theta)$")
     ax[2, 1].set_ylabel(r"$\phi$")
-    ax[2, 2].hist([ts_bkg, ts_sig], bins=100, range=(t_min, t_max), stacked=True, color=[ORANGE, BLUE], label=["background", "signal"])
+    ax[2, 2].hist([ts_bkg, ts_sig], bins=100, range=(t_min, t_max), stacked=True, color=[RED, BLUE], label=["background", "signal"])
     ax[2, 2].set_xlabel("$t$ (arb)")
     ax[2, 2].set_ylabel(r"Counts / 0.02")
     ax[2, 2].legend(loc="upper right")
-    ax[2, 3].hist([gs_bkg, gs_sig], bins=100, range=(g_min, g_max), stacked=True, color=[ORANGE, BLUE], label=["background", "signal"])
+    ax[2, 3].hist([gs_bkg, gs_sig], bins=100, range=(g_min, g_max), stacked=True, color=[RED, BLUE], label=["background", "signal"])
     ax[2, 3].set_xlabel("$g$ (arb)")
     ax[2, 3].set_ylabel(r"Counts / 0.036")
     ax[2, 3].legend(loc="upper right")
@@ -767,14 +768,15 @@ def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qf
 
     plt.figure(figsize=(10, 6))
     # Scatter plot of selected masses
-    plt.hist(ms, bins=30, label='Selected Events Masses', density=True, color=GRAY)
+    plt.hist(ms, bins=30, label='Selected Events Masses', density=True, color=PALE_GRAY)
+    plt.hist(ms, bins=30, density=True, histtype='step', color=DARK_GRAY)
 
     # Plot fit components
     m_range = np.linspace(m_min, m_max, 1000)
-    plt.axvline(mstar, ls=':', color=MAGENTA, label='Event')
-    plt.plot(m_range, [z_fit * signal(m_val) for m_val in m_range], ls='--', color=BLUE, label='Signal Fit')
-    plt.plot(m_range, [(1 - z_fit) * background(m_val, b_fit) for m_val in m_range], ls='--', color=ORANGE, label='Background Fit')
-    plt.plot(m_range, [model(m_val, z_fit, b_fit) for m_val in m_range], ls='-', color=BLACK, label='Total Fit')
+    plt.axvline(mstar, ls=':', lw=2, color=BLACK, label='Event')
+    plt.plot(m_range, [z_fit * signal(m_val) for m_val in m_range], ls='-', lw=2, color=BLUE, label='Signal Fit')
+    plt.plot(m_range, [(1 - z_fit) * background(m_val, b_fit) for m_val in m_range], ls='--', lw=2, color=RED, label='Background Fit')
+    plt.plot(m_range, [model(m_val, z_fit, b_fit) for m_val in m_range], ls='-', lw=2.5, color=PURPLE, label='Total Fit')
 
     plt.xlabel('Mass')
     plt.ylabel('Density')
