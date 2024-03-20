@@ -3,7 +3,7 @@
 This script analyzes particle decay events by generating signal and background data, computing factors such as Q-factors and sPlot weights, and visualizing the data through plots and fits. The available options enable customization of the dataset size, plot types, and factor calculations.
 
 Usage:
-    analysis.py [--num-sig=<nsig>] [--num-bkg=<nbkg>] [--knn=<knn>] [--density_knn] [--radius_knn=<radius>] [--parallel]
+    analysis.py [options]
 
 Options:
     -h --help               Show this screen.
@@ -11,8 +11,8 @@ Options:
     --num-bkg=<nbkg>        Number of background events to generate. [default: 10000]
     --parallel              Use parallel processing for event generation.
     --knn=<knn>             Number of nearest neighbors for kNN calculations. [default: 100]
-    --density_knn           Compute kNN calculations based off on local density for each event
-    --radius_knn=<radius>   Use radius-based neighbors calculations with specified radius. [default: None]
+    --density-knn           Compute kNN calculations based off on local density for each event
+    --radius-knn=<radius>   Use radius-based neighbors calculations with specified radius. [default: None]
 """
 
 # Import necessary libraries
@@ -32,9 +32,9 @@ from rich.console import Console
 from rich.progress import Progress, track
 from rich.table import Table
 from scipy.integrate import quad
+from scipy.sparse.csgraph import connected_components
 from scipy.special import voigt_profile
 from sklearn.neighbors import NearestNeighbors, kneighbors_graph
-from scipy.sparse.csgraph import connected_components
 
 # Set matplotlib and random number generator settings
 # mpl.style.use("frappe")
@@ -305,17 +305,14 @@ def k_nearest_neighbors(x, k):
     _, indices = neighbors.kneighbors(x)
     return indices  # includes the point itself + k nearest neighbors
 
-def calculate_local_density_knn(events, metric='euclidean'):
+def calculate_local_density_knn(events, phase_space, metric='euclidean'):
     """
     Calculate the KNN based on local density for each event.
     The function returns indices of events in the neighborhood for each event.
     """
-    # Extract features from events to form feature matrix
-    features = np.array([[event.mass, event.costheta, event.phi, event.t, event.g] for event in events])
-
     # Calculate pairwise distances
-    nbrs = NearestNeighbors(n_neighbors=len(events), algorithm='auto', metric=metric).fit(features)
-    distances, indices = nbrs.kneighbors(features)
+    nbrs = NearestNeighbors(n_neighbors=len(events), algorithm='auto', metric=metric).fit(phase_space)
+    distances, indices = nbrs.kneighbors(phase_space)
 
     # Estimate local density
     k_density = 5  # Can adjust this based on dataset
@@ -325,21 +322,20 @@ def calculate_local_density_knn(events, metric='euclidean'):
     sorted_density_indices = np.argsort(densities)[::-1]
 
     # Compute variable K based on density ranking
-    variable_k = np.linspace(10, 100, len(events)).astype(int)  # Linearly increasing K from 10 to 100
+    variable_k = np.linspace(50, 200, len(events)).astype(int)  # Linearly increasing K from 10 to 100
     sorted_k = variable_k[np.argsort(sorted_density_indices)]  # Assign K based on density ranking
 
     # Calculate variable KNN
     variable_knn_indices = [indices[i, :k] for i, k in enumerate(sorted_k)]
-    
+
     return variable_knn_indices
 
-def calculate_radius_neighbors(events, radius, metric='euclidean'):
+def calculate_radius_neighbors(events, phase_space, radius, metric='euclidean'):
     """
     Calculate neighbors within a specified radius for each event.
     """
-    features = np.array([[event.mass, event.costheta, event.phi, event.t, event.g] for event in events])
-    nbrs = NearestNeighbors(radius=radius, algorithm='auto', metric=metric).fit(features)
-    distances, indices = nbrs.radius_neighbors(features)
+    nbrs = NearestNeighbors(radius=radius, algorithm='auto', metric=metric).fit(phase_space)
+    distances, indices = nbrs.radius_neighbors(phase_space)
 
     # Convert sparse matrix to list of lists for indices
     indices_list = [list(ind) for ind in indices]
@@ -548,21 +544,23 @@ def calculate_inplot(events: list[Event]) -> np.ndarray:
     inplot_weights = inplot(ms, *best_fit.values)
     return np.array(inplot_weights)
 
-def calculate_q_factors(events: list[Event], num_knn: int, use_density_knn=False, use_radius_knn=None, plot_indices: list[int] | None=None) -> np.ndarray:
+def calculate_q_factors(events: list[Event], phase_space: np.ndarray, name: str, num_knn: int, use_density_knn=False, use_radius_knn=None, plot_indices: list[int] | None=None) -> np.ndarray:
     ms = np.array([e.mass for e in events])
-    phase_space = np.array([[e.costheta / (2/3), e.phi / (2 * np.pi**3 / 3)] for e in events])
 
     knn_indices = []
-    
+
     if use_density_knn:
+        tag = "_density"
         # Calculate KNN based on local density
         with console.status("Calculating K-Nearest Neighbors Based on Local Density"):
-            knn_indices = calculate_local_density_knn(events)
+            knn_indices = calculate_local_density_knn(events, phase_space)
     elif use_radius_knn:
+        tag = "_radius"
         radius = float(use_radius_knn)
         with console.status("Calculating Radius Neighbors"):
-            knn_indices = calculate_radius_neighbors(events, radius)
+            knn_indices = calculate_radius_neighbors(events, phase_space, radius)
     else:
+        tag = ""
         # Standard KNN calculation
         with console.status("Calculating K-Nearest Neighbors"):
             indices = k_nearest_neighbors(phase_space, num_knn)
@@ -596,151 +594,7 @@ def calculate_q_factors(events: list[Event], num_knn: int, use_density_knn=False
         best_fit = fits[np.argmin(nlls)]
         q_factors.append(inplot(ms[i], *best_fit.values))
         if plot_indices and i in plot_indices:
-            plot_qfactor_fit(ms[i], ms[indices], z_fit=best_fit.values[0], b_fit=best_fit.values[1], event_index=i, qfactor_type="angles")
-    return np.array(q_factors)
-
-def calculate_q_factors_with_t(events: list[Event], num_knn: int, use_density_knn=False, use_radius_knn=None, plot_indices: list[int] | None=None) -> np.ndarray:
-    ms = np.array([e.mass for e in events])
-    phase_space = np.array([[e.costheta / (2/3), e.phi / (2 * np.pi**3 / 3), e.t / ((t_max**3 - t_min**3) / 3)] for e in events])
-
-    knn_indices = []
-
-    if use_density_knn:
-        with console.status("Calculating K-Nearest Neighbors Based on Local Density"):
-            knn_indices = calculate_local_density_knn(events)
-    elif use_radius_knn:                                                                                                                                                                              
-        radius = float(use_radius_knn)
-        with console.status("Calculating Radius Neighbors"):
-            knn_indices = calculate_radius_neighbors(events, radius)
-    else:
-        with console.status("Calculating K-Nearest Neighbors"):
-            indices = k_nearest_neighbors(phase_space, num_knn)
-            knn_indices = [index_set[1:] for index_set in indices] 
-
-    def model(m: np.ndarray, z, b) -> np.ndarray:
-        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
-
-    def inplot(m, z, b) -> float:
-        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
-
-    q_factors = []
-    for i in track(range(len(events)), description="Calculating Q-Factors (with t)"):
-        indices = knn_indices[i]
-        c = cost.UnbinnedNLL(ms[indices], model)
-        # 100% signal starting condition
-        m_1 = Minuit(c, z=1.0, b=b_true)
-        m_1.limits['z'] = (0, 1)
-        m_1.migrad()
-        # 100% background starting condition
-        m_2 = Minuit(c, z=0.0, b=b_true)
-        m_2.limits['z'] = (0, 1)
-        m_2.migrad()
-        # 50% signal / 50% background starting condition
-        m_3 = Minuit(c, z=0.5, b=b_true)
-        m_3.limits['z'] = (0, 1)
-        m_3.migrad()
-        fits = [m_1, m_2, m_3]
-        nlls = np.array([m.fval for m in fits])
-        best_fit = fits[np.argmin(nlls)]
-        q_factors.append(inplot(ms[i], *best_fit.values))
-        if plot_indices and i in plot_indices:
-            plot_qfactor_fit(ms[i], ms[indices], z_fit=best_fit.values[0], b_fit=best_fit.values[1], event_index=i, qfactor_type="angles")
-    return np.array(q_factors)
-
-def calculate_q_factors_with_g(events: list[Event], num_knn: int, use_density_knn=False, use_radius_knn=None, plot_indices: list[int] | None=None) -> np.ndarray:
-    ms = np.array([e.mass for e in events])
-    phase_space = np.array([[e.costheta / (2/3), e.phi / (2 * np.pi**3 / 3), e.g / ((g_max**3 - g_min**3) / 3)] for e in events])
-
-    knn_indices = []
-
-    if use_density_knn:
-        with console.status("Calculating K-Nearest Neighbors Based on Local Density"):
-            knn_indices = calculate_local_density_knn(events)
-    elif use_radius_knn:                                                                                                                                                                              
-        radius = float(use_radius_knn)
-        with console.status("Calculating Radius Neighbors"):
-            knn_indices = calculate_radius_neighbors(events, radius)
-    else:
-        with console.status("Calculating K-Nearest Neighbors"):
-            indices = k_nearest_neighbors(phase_space, num_knn)
-            knn_indices = [index_set[1:] for index_set in indices] 
-
-    def model(m: np.ndarray, z, b) -> np.ndarray:
-        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
-
-    def inplot(m, z, b) -> float:
-        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
-
-    q_factors = []
-    for i in track(range(len(events)), description="Calculating Q-Factors (with g)"):
-        indices = knn_indices[i]
-        c = cost.UnbinnedNLL(ms[indices], model)
-        # 100% signal starting condition
-        m_1 = Minuit(c, z=1.0, b=b_true)
-        m_1.limits['z'] = (0, 1)
-        m_1.migrad()
-        # 100% background starting condition
-        m_2 = Minuit(c, z=0.0, b=b_true)
-        m_2.limits['z'] = (0, 1)
-        m_2.migrad()
-        # 50% signal / 50% background starting condition
-        m_3 = Minuit(c, z=0.5, b=b_true)
-        m_3.limits['z'] = (0, 1)
-        m_3.migrad()
-        fits = [m_1, m_2, m_3]
-        nlls = np.array([m.fval for m in fits])
-        best_fit = fits[np.argmin(nlls)]
-        q_factors.append(inplot(ms[i], *best_fit.values))
-        if plot_indices and i in plot_indices:
-            plot_qfactor_fit(ms[i], ms[indices], z_fit=best_fit.values[0], b_fit=best_fit.values[1], event_index=i, qfactor_type="angles")
-    return np.array(q_factors)
-
-def calculate_q_factors_with_t_g(events: list[Event], num_knn: int, use_density_knn=False, use_radius_knn=None, plot_indices: list[int] | None=None) -> np.ndarray:
-    ms = np.array([e.mass for e in events])
-    phase_space = np.array([[e.costheta / (2/3), e.phi / (2 * np.pi**3 / 3), e.t / ((t_max**3 - t_min**3) / 3), e.g / ((g_max**3 - g_min**3) / 3)] for e in events])
-
-    knn_indices = []
-
-    if use_density_knn:
-        with console.status("Calculating K-Nearest Neighbors Based on Local Density"):
-            knn_indices = calculate_local_density_knn(events)
-    elif use_radius_knn:                                                                                                                                                                              
-        radius = float(use_radius_knn)
-        with console.status("Calculating Radius Neighbors"):
-            knn_indices = calculate_radius_neighbors(events, radius)
-    else:
-        with console.status("Calculating K-Nearest Neighbors"):
-            indices = k_nearest_neighbors(phase_space, num_knn)
-            knn_indices = [index_set[1:] for index_set in indices] 
-
-    def model(m: np.ndarray, z, b) -> np.ndarray:
-        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
-
-    def inplot(m, z, b) -> float:
-        return (z * m_sig(m)) / (z * m_sig(m) + (1 - z) * m_bkg(m, b))
-
-    q_factors = []
-    for i in track(range(len(events)), description="Calculating Q-Factors (with t & g)"):
-        indices = knn_indices[i]
-        c = cost.UnbinnedNLL(ms[indices], model)
-        # 100% signal starting condition
-        m_1 = Minuit(c, z=1.0, b=b_true)
-        m_1.limits['z'] = (0, 1)
-        m_1.migrad()
-        # 100% background starting condition
-        m_2 = Minuit(c, z=0.0, b=b_true)
-        m_2.limits['z'] = (0, 1)
-        m_2.migrad()
-        # 50% signal / 50% background starting condition
-        m_3 = Minuit(c, z=0.5, b=b_true)
-        m_3.limits['z'] = (0, 1)
-        m_3.migrad()
-        fits = [m_1, m_2, m_3]
-        nlls = np.array([m.fval for m in fits])
-        best_fit = fits[np.argmin(nlls)]
-        q_factors.append(inplot(ms[i], *best_fit.values))
-        if plot_indices and i in plot_indices:
-            plot_qfactor_fit(ms[i], ms[indices], z_fit=best_fit.values[0], b_fit=best_fit.values[1], event_index=i, qfactor_type="angles")
+            plot_qfactor_fit(ms[i], ms[indices], z_fit=best_fit.values[0], b_fit=best_fit.values[1], event_index=i, qfactor_type=f"{name}{tag}")
     return np.array(q_factors)
 
 def calculate_splot_weights(events: list[Event], sig_frac_init=0.5, b_init=0.5) -> np.ndarray:
@@ -788,16 +642,19 @@ def calculate_sq_factors(events: list[Event], num_knn: int, use_density_knn=Fals
     knn_indices = []
 
     if use_density_knn:
+        tag = "_density"
         with console.status("Calculating K-Nearest Neighbors Based on Local Density"):
-            knn_indices = calculate_local_density_knn(events)
-    elif use_radius_knn:                                                                                                                                                                              
+            knn_indices = calculate_local_density_knn(events, phase_space)
+    elif use_radius_knn:
+        tag = "_radius"
         radius = float(use_radius_knn)
         with console.status("Calculating Radius Neighbors"):
-            knn_indices = calculate_radius_neighbors(events, radius)
+            knn_indices = calculate_radius_neighbors(events, phase_space, radius)
     else:
+        tag = ""
         with console.status("Calculating K-Nearest Neighbors"):
             indices = k_nearest_neighbors(phase_space, num_knn)
-            knn_indices = [index_set[1:] for index_set in indices] 
+            knn_indices = [index_set[1:] for index_set in indices]
 
     def model(m: np.ndarray, z, b) -> np.ndarray:
         return z * m_sig(m) + (1 - z) * m_bkg(m, b)
@@ -821,7 +678,7 @@ def calculate_sq_factors(events: list[Event], num_knn: int, use_density_knn=Fals
         m_3 = Minuit(c, z=0.5, b=b_true)
         m_3.limits['z'] = (0, 1)
         m_3.migrad()
-        fits = [m_1, m_2, m_3]                                                                                                                                                                        
+        fits = [m_1, m_2, m_3]
         nlls = np.array([m.fval for m in fits])
         best_fit = fits[np.argmin(nlls)]
         n_sig = len(ms[indices]) * best_fit.values[0]
@@ -831,7 +688,7 @@ def calculate_sq_factors(events: list[Event], num_knn: int, use_density_knn=Fals
         V_sb_inv = np.sum(np.array([m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms[indices]]), axis=0)
         V_bb_inv = np.sum(np.array([m_bkg(m, b) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))**2 for m in ms[indices]]), axis=0)
         Vmat_inv = np.array([[V_ss_inv, V_sb_inv], [V_sb_inv, V_bb_inv]])
-        # Fix issue if matrix inversion is not possible 
+        # Fix issue if matrix inversion is not possible
         try:
             V = np.linalg.inv(Vmat_inv)
         except np.linalg.LinAlgError:
@@ -842,7 +699,7 @@ def calculate_sq_factors(events: list[Event], num_knn: int, use_density_knn=Fals
 
         sq_factors.append((V[0, 0] * m_sig(ms[i]) + V[0, 1] * m_bkg(ms[i], b)) / (n_sig * m_sig(ms[i]) + n_bkg * m_bkg(ms[i], b)))
         if plot_indices and i in plot_indices:
-            plot_sqfactor_fit(ms[i], ms[indices], z_fit=best_fit.values[0], b_fit=best_fit.values[1], event_index=i, qfactor_type="angles")
+            plot_qfactor_fit(ms[i], ms[indices], z_fit=best_fit.values[0], b_fit=best_fit.values[1], event_index=i, qfactor_type=f"sq_angles{tag}")
     return np.array(sq_factors)
 
 def fit_angles(events: list[Event], weights: np.ndarray | None = None, p00_init: float=p00_true, p1n1_init: float=p1n1_true, p10_init: float=p10_true):
@@ -870,16 +727,9 @@ def fit_g(events: list[Event], weights: np.ndarray | None = None, g_init: float=
     return wunll_g.fit([g_true])
 
 def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qfactor_type: str):
-    # Define the signal and background models separately
-    def signal(m):
-        return m_sig(m)
-
-    def background(m, b):
-        return m_bkg(m, b)
-
     # Combined model for the fit
     def model(m, z, b):
-        return z * signal(m) + (1 - z) * background(m, b)
+        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
 
     plt.figure(figsize=(10, 6))
     # Scatter plot of selected masses
@@ -889,8 +739,8 @@ def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qf
     # Plot fit components
     m_range = np.linspace(m_min, m_max, 1000)
     plt.axvline(mstar, ls=':', lw=2, color=BLACK, label='Event')
-    plt.plot(m_range, [z_fit * signal(m_val) for m_val in m_range], ls='-', lw=2, color=BLUE, label='Signal Fit')
-    plt.plot(m_range, [(1 - z_fit) * background(m_val, b_fit) for m_val in m_range], ls='--', lw=2, color=RED, label='Background Fit')
+    plt.plot(m_range, [z_fit * m_sig(m_val) for m_val in m_range], ls='-', lw=2, color=BLUE, label='Signal Fit')
+    plt.plot(m_range, [(1 - z_fit) * m_bkg(m_val, b_fit) for m_val in m_range], ls='--', lw=2, color=RED, label='Background Fit')
     plt.plot(m_range, [model(m_val, z_fit, b_fit) for m_val in m_range], ls='-', lw=2.5, color=PURPLE, label='Total Fit')
 
     plt.xlabel('Mass')
@@ -898,36 +748,6 @@ def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qf
     plt.title(f'Fit for Event {event_index} and its Nearest Neighbors')
     plt.legend()
     plt.savefig(f"qfactors_{qfactor_type}_{event_index}.png", dpi=300)
-    plt.close()
-
-def plot_sqfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, sqfactor_type: str):
-    # Define the signal and background models separately
-    def signal(m):
-        return m_sig(m)
-
-    def background(m, b):
-        return m_bkg(m, b)
-
-    # Combined model for the fit
-    def model(m, z, b):
-        return z * signal(m) + (1 - z) * background(m, b)
-
-    plt.figure(figsize=(10, 6))
-    # Histogram of selected masses (neighbors)
-    plt.hist(ms[indices], bins=30, alpha=0.5, density=True, label='Neighboring Events Masses', color=GRAY)
-
-    # Plot fit components
-    m_range = np.linspace(m_min, m_max, 1000)
-    plt.axvline(ms[event_index], ls=':', color=MAGENTA, label='Event Mass')
-    plt.plot(m_range, [z_fit * signal(m_val) for m_val in m_range], ls='--', color=BLUE, label='Signal Fit')
-    plt.plot(m_range, [(1 - z_fit) * background(m_val, b_fit) for m_val in m_range], ls='--', color=ORANGE, label='Background Fit')
-    plt.plot(m_range, [model(m_val, z_fit, b_fit) for m_val in m_range], ls='-', color=BLACK, label='Total Fit')
-
-    plt.xlabel('Mass')
-    plt.ylabel('Density')
-    plt.title(f'sQ-Factor Fit for Event {event_index}')
-    plt.legend()
-    plt.savefig(f"TEST_sqfactors_{qfactor_type}_{event_index}.png", dpi=300)
     plt.close()
 
 def plot_radius_knn_visualization(events, selected_event_index, radius_knn):
@@ -963,8 +783,8 @@ def main():
     num_sig = int(args['--num-sig'])
     num_bkg = int(args['--num-bkg'])
     num_knn = int(args['--knn'])
-    use_density_knn = args['--density_knn']
-    use_radius_knn = args['--radius_knn']
+    use_density_knn = args['--density-knn']
+    use_radius_knn = args['--radius-knn']
 
     if use_radius_knn != 'None':
         try:
@@ -973,7 +793,12 @@ def main():
             raise ValueError(f"Invalid value for --radius_knn: {use_radius_knn}")
     else:
         use_radius_knn = None
-    
+    tag = ""
+    if use_density_knn:
+        tag = "_density"
+    elif use_radius_knn:
+        tag = "_radius"
+
     parallel = args['--parallel']
 
     if parallel:
@@ -1022,42 +847,57 @@ def main():
     plot_events(events_sig, events_sig, weights=None, filename="sig_no_weights.png")
     plot_events(events_all, events_sig, weights=None, filename="all_no_weights.png")
     t.add_row("None", *get_results(events_all, weights=None))
+    console.print(t)
 
     sideband_weights = calculate_sideband_weights(events_all)
     plot_events(events_bkg, events_sig, weights=sideband_weights[num_sig:], filename="bkg_sideband.png")
     plot_events(events_sig, events_sig, weights=sideband_weights[:num_sig], filename="sig_sideband.png")
     plot_events(events_all, events_sig, weights=sideband_weights, filename="all_sideband.png")
     t.add_row("Sideband Subtraction", *get_results(events_all, weights=sideband_weights))
+    console.print(t)
 
     inplot_weights = calculate_inplot(events_all)
     plot_events(events_bkg, events_sig, weights=inplot_weights[num_sig:], filename="bkg_inplot.png")
     plot_events(events_sig, events_sig, weights=inplot_weights[:num_sig], filename="sig_inplot.png")
     plot_events(events_all, events_sig, weights=inplot_weights, filename="all_inplot.png")
     t.add_row("inPlot", *get_results(events_all, weights=inplot_weights))
+    console.print(t)
 
-    q_factors_weights = calculate_q_factors(events_all, num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
-    plot_events(events_bkg, events_sig, weights=q_factors_weights[num_sig:], filename="bkg_q_factor.png")
-    plot_events(events_sig, events_sig, weights=q_factors_weights[:num_sig], filename="sig_q_factor.png")
-    plot_events(events_all, events_sig, weights=q_factors_weights, filename="all_q_factor.png")
+    q_factors_weights = calculate_q_factors(events_all, phase_space=np.array([[e.costheta / (2/3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]), name='angles', num_knn=num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
+    plot_events(events_bkg, events_sig, weights=q_factors_weights[num_sig:], filename=f"bkg_q_factor{tag}.png")
+    plot_events(events_sig, events_sig, weights=q_factors_weights[:num_sig], filename=f"sig_q_factor{tag}.png")
+    plot_events(events_all, events_sig, weights=q_factors_weights, filename=f"all_q_factor{tag}.png")
     t.add_row("Q-Factors", *get_results(events_all, weights=q_factors_weights))
+    console.print(t)
 
-    q_factors_t_weights = calculate_q_factors_with_t(events_all, num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
-    plot_events(events_bkg, events_sig, weights=q_factors_t_weights[num_sig:], filename="bkg_q_factor_t.png")
-    plot_events(events_sig, events_sig, weights=q_factors_t_weights[:num_sig], filename="sig_q_factor_t.png")
-    plot_events(events_all, events_sig, weights=q_factors_t_weights, filename="all_q_factor_t.png")
+    q_factors_t_weights = calculate_q_factors(events_all, phase_space=np.array([[e.costheta / (2/3), e.phi / (2 * np.pi**3 / 3), e.t / ((t_max**3 - t_min**3) / 3)] for e in events_all]), name='angles_t', num_knn=num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
+    plot_events(events_bkg, events_sig, weights=q_factors_t_weights[num_sig:], filename=f"bkg_q_factor_t{tag}.png")
+    plot_events(events_sig, events_sig, weights=q_factors_t_weights[:num_sig], filename=f"sig_q_factor_t{tag}.png")
+    plot_events(events_all, events_sig, weights=q_factors_t_weights, filename=f"all_q_factor_t{tag}.png")
     t.add_row("Q-Factors (with t)", *get_results(events_all, weights=q_factors_t_weights))
+    console.print(t)
 
-    q_factors_g_weights = calculate_q_factors_with_g(events_all, num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
-    plot_events(events_bkg, events_sig, weights=q_factors_g_weights[num_sig:], filename="bkg_q_factor_g.png")
-    plot_events(events_sig, events_sig, weights=q_factors_g_weights[:num_sig], filename="sig_q_factor_g.png")
-    plot_events(events_all, events_sig, weights=q_factors_g_weights, filename="all_q_factor_g.png")
+    q_factors_g_weights = calculate_q_factors(events_all, phase_space=np.array([[e.costheta / (2/3), e.phi / (2 * np.pi**3 / 3), e.g / ((g_max**3 - g_min**3) / 3)] for e in events_all]), name='angles_g', num_knn=num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
+    plot_events(events_bkg, events_sig, weights=q_factors_g_weights[num_sig:], filename=f"bkg_q_factor_g{tag}.png")
+    plot_events(events_sig, events_sig, weights=q_factors_g_weights[:num_sig], filename=f"sig_q_factor_g{tag}.png")
+    plot_events(events_all, events_sig, weights=q_factors_g_weights, filename=f"all_q_factor_g{tag}.png")
     t.add_row("Q-Factors (with g)", *get_results(events_all, weights=q_factors_g_weights))
+    console.print(t)
 
-    q_factors_t_g_weights = calculate_q_factors_with_t_g(events_all, num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
-    plot_events(events_bkg, events_sig, weights=q_factors_t_g_weights[num_sig:], filename="bkg_q_factor_t_g.png")
-    plot_events(events_sig, events_sig, weights=q_factors_t_g_weights[:num_sig], filename="sig_q_factor_t_g.png")
-    plot_events(events_all, events_sig, weights=q_factors_t_g_weights, filename="all_q_factor_t_g.png")
+    q_factors_t_g_weights = calculate_q_factors(events_all, phase_space=np.array([[e.costheta / (2/3), e.phi / (2 * np.pi**3 / 3), e.t / ((t_max**3 - t_min**3) / 3), e.g / ((g_max**3 - g_min**3) / 3)] for e in events_all]), name='angles_t_g', num_knn=num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
+    plot_events(events_bkg, events_sig, weights=q_factors_t_g_weights[num_sig:], filename=f"bkg_q_factor_t_g{tag}.png")
+    plot_events(events_sig, events_sig, weights=q_factors_t_g_weights[:num_sig], filename=f"sig_q_factor_t_g{tag}.png")
+    plot_events(events_all, events_sig, weights=q_factors_t_g_weights, filename=f"all_q_factor_t_g{tag}.png")
     t.add_row("Q-Factors (with t and g)", *get_results(events_all, weights=q_factors_t_g_weights))
+    console.print(t)
+
+    q_factors_all_weights = calculate_q_factors(events_all, phase_space=np.array([[e.mass, e.costheta, e.phi, e.t, e.g] for e in events_all]), name='all_flat_metric', num_knn=num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
+    plot_events(events_bkg, events_sig, weights=q_factors_all_weights[num_sig:], filename=f"bkg_q_factor_all_flat_metric{tag}.png")
+    plot_events(events_sig, events_sig, weights=q_factors_all_weights[:num_sig], filename=f"sig_q_factor_all_flat_metric{tag}.png")
+    plot_events(events_all, events_sig, weights=q_factors_all_weights, filename=f"all_q_factor_all_flat_metric{tag}.png")
+    t.add_row("Q-Factors (flat metric)", *get_results(events_all, weights=q_factors_all_weights))
+    console.print(t)
+
 
     sweights = calculate_splot_weights(events_all)
     sweights_sig = sweights[:, 0]
@@ -1066,18 +906,19 @@ def main():
     plot_events(events_sig, events_sig, weights=sweights_sig[:num_sig], filename="sig_sweight.png")
     plot_events(events_all, events_sig, weights=sweights_sig, filename="all_sweight.png")
     t.add_row("sWeights", *get_results(events_all, weights=sweights_sig))
+    console.print(t)
 
-    sq_factors_weights = calculate_sq_factors(events_all, num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn)
-    plot_events(events_bkg, events_sig, weights=sq_factors_weights[num_sig:], filename="bkg_sq_factor.png")
-    plot_events(events_sig, events_sig, weights=sq_factors_weights[:num_sig], filename="sig_sq_factor.png")
-    plot_events(events_all, events_sig, weights=sq_factors_weights, filename="all_sq_factor.png")
+    sq_factors_weights = calculate_sq_factors(events_all, num_knn, use_density_knn=use_density_knn, use_radius_knn=use_radius_knn, plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2])
+    plot_events(events_bkg, events_sig, weights=sq_factors_weights[num_sig:], filename=f"bkg_sq_factor{tag}.png")
+    plot_events(events_sig, events_sig, weights=sq_factors_weights[:num_sig], filename=f"sig_sq_factor{tag}.png")
+    plot_events(events_all, events_sig, weights=sq_factors_weights, filename=f"all_sq_factor{tag}.png")
     t.add_row("sQ-Factors", *get_results(events_all, weights=sq_factors_weights))
-    
-    selected_event_index = 0  # Index of the event you want to inspect
-    plot_radius_knn_visualization(events_all, selected_event_index, use_radius_knn)
+
+    if use_radius_knn:
+        selected_event_index = 0  # Index of the event you want to inspect
+        plot_radius_knn_visualization(events_all, selected_event_index, use_radius_knn)
 
     console.print(t)
 
 if __name__ == '__main__':
     main()
-
