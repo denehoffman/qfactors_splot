@@ -15,9 +15,9 @@ This analysis is part of an ongoing project which will eventually be published, 
 distributions”. In: Nuclear Instruments and Methods in Physics Research
 Section A: Accelerators, Spectrometers, Detectors and Associated Equip-
 ment 555 (1-2 Dec. 2005), pp. 356–369. issn: 01689002. doi: 10.1016/j.
-nima.2005.08.106.
+nima.2005.08.106. [arXiv:physics/0402083](https://arxiv.org/abs/physics/0402083)
 
 [^2]: M Williams, M Bellis, and C A Meyer. “Multivariate side-band subtraction
 using probabilistic event weights”. In: Journal of Instrumentation 4 (10
 Oct. 2009), P10003–P10003. issn: 1748-0221. doi: 10.1088/1748- 0221/
-4/10/P10003.
+4/10/P10003. [arXiv:0809.2548](https://arxiv.org/abs/0809.2548)
