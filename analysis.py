@@ -13,6 +13,7 @@ Options:
     --knn=<knn>             Number of nearest neighbors for kNN calculations. [default: 100]
     --density-knn           Compute kNN calculations based off on local density for each event
     --radius-knn=<radius>   Use radius-based neighbors calculations with specified radius. [default: None]
+    --calc-gen              Compare and plot theoretical and calcuated q-values with one another
 """
 
 # Import necessary libraries
@@ -37,6 +38,7 @@ from scipy.integrate import quad
 from scipy.sparse.csgraph import connected_components
 from scipy.special import voigt_profile
 from sklearn.neighbors import NearestNeighbors, kneighbors_graph
+from scipy.stats import ks_2samp
 
 # Set matplotlib and random number generator settings
 # mpl.style.use("frappe")
@@ -854,7 +856,65 @@ def plot_radius_knn_visualization(events, selected_event_index, radius_knn):
     plt.grid(True)
     plt.axis("equal")
     plt.show()
+def calculate_theoretical_q_factors(events, b_true):
+    """
+    Compute theoretical Q-factors based on the true underlying model.
+    """
+    # Extract the masses from all events as a NumPy array
+    masses = np.array([event.mass for event in events])
+    
+    # Calculate signal and background densities using the vectorized functions
+    signal_densities = m_sig(masses)
+    background_densities = m_bkg(masses, b_true)
+    
+    # Calculate total densities
+    total_densities = signal_densities + background_densities
+    
+    # Calculate Q-factors, handling division by zero by using np.where
+    q_factors_theoretical = np.where(total_densities > 0, signal_densities / total_densities, 0)
+    
+    return q_factors_theoretical
 
+def compare_q_factors(events, q_factors_calculated, b_true, title='Q-Factors Comparison', q_factor_type='standard'):
+    """
+    Compare calculated Q-factors to the theoretical Q-factor distribution.
+    """
+    # Generate theoretical Q-factor distribution
+    q_factors_theoretical = calculate_theoretical_q_factors(events, b_true)
+    q_factors_theoretical = q_factors_theoretical.flatten()
+
+    # Visual comparison using histograms
+    plt.figure(figsize=(12, 6))
+    plt.scatter(q_factors_theoretical, q_factors_calculated, alpha=0.5, label='Data Points')
+    plt.plot([0, 1], [0, 1], 'r-', label='Qcalc = Qgen')  # Red line for Qcalc = Qgen
+    plt.xlabel('Generated Q-factors (Qgen)')
+    plt.ylabel('Calculated Q-factors (Qcalc)')
+    plt.title('Calculated vs. Generated Q-factors')
+    plt.legend()
+    plt.grid(True)
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.savefig(f'Gen_Calc_comparison_{q_factor_type}.png')  
+    plt.close()
+
+    q_factors_difference = q_factors_calculated - q_factors_theoretical
+
+    plt.figure(figsize=(12, 6))
+    plt.hist(q_factors_difference, bins=50, alpha=0.75, color='blue', edgecolor='black')
+    plt.xlabel('Qcalc - Qgen')
+    plt.ylabel('Frequency')
+    plt.title('Difference Between Calculated and Generated Q-factors')
+    plt.grid(True)
+    plt.savefig(f'Gen_Calc_subtract_{q_factor_type}.png')  
+    plt.close()
+
+    # Quantitative comparison using Kolmogorov-Smirnov test
+    ks_stat, ks_p_value = ks_2samp(q_factors_calculated, q_factors_theoretical)
+    print(f"KS Statistic: {ks_stat}, P-value: {ks_p_value}")
+    if ks_p_value < 0.05:
+        print("The calculated Q-factors distribution is significantly different from the theoretical distribution.")
+    else:
+        print("The calculated Q-factors distribution is not significantly different from the theoretical distribution.")
 
 def main():
     args = docopt(__doc__)
@@ -864,7 +924,8 @@ def main():
     num_knn = int(args["--knn"])
     use_density_knn = args["--density-knn"]
     use_radius_knn = args["--radius-knn"]
-
+    comp_calc_gen = args["--calc-gen"]
+    
     if use_radius_knn != "None":
         try:
             use_radius_knn = float(use_radius_knn)
@@ -1205,6 +1266,17 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
     if use_radius_knn:
         selected_event_index = 0  # Index of the event you want to inspect
         plot_radius_knn_visualization(events_all, selected_event_index, use_radius_knn)
+
+    if comp_calc_gen:
+        # Theoretical model remains constant across variants
+        q_factors_theoretical = calculate_theoretical_q_factors(events_all, b_true)
+
+        compare_q_factors(events_all, q_factors_weights, q_factors_theoretical, title='Standard Q-Factors Comparison', q_factor_type='standard')
+        compare_q_factors(events_all, q_factors_t_weights, q_factors_theoretical, title='Q-Factors with t Comparison', q_factor_type='with_t')
+        compare_q_factors(events_all, q_factors_g_weights, q_factors_theoretical, title='Q-Factors with g Comparison', q_factor_type='with_g')
+        compare_q_factors(events_all, q_factors_t_g_weights, q_factors_theoretical, title='Q-Factors with t and g Comparison', q_factor_type='with_t_and_g')
+        compare_q_factors(events_all, sq_factors_weights, q_factors_theoretical, title='sQ-Factors Comparison', q_factor_type='sq_factors')
+
 
     console.print(t)
 
