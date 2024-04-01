@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-This script analyzes particle decay events by generating signal and background data, computing factors such as Q-factors and sPlot weights, and visualizing the data through plots and fits. The available options enable customization of the dataset size, plot types, and factor calculations.
+Analyzes particle decay events by generating signal and background data, computing factors such as Q-factors and sPlot weights, and visualizing the data through plots and fits. The available options enable customization of the dataset size, plot types, and factor calculations.
 
 Usage:
     analysis.py [options]
@@ -24,12 +24,16 @@ from typing import NamedTuple
 
 import matplotlib as mpl
 
-mpl.use("Agg")
+mpl.use('Agg')
+mpl.rcParams['text.usetex'] = True
+mpl.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize as opt
 from docopt import docopt
 from iminuit import Minuit, cost
+from iminuit.util import MError
 from matplotlib.colors import LinearSegmentedColormap
 from rich.console import Console
 from rich.progress import Progress, track
@@ -37,12 +41,12 @@ from rich.table import Table
 from scipy.integrate import quad
 from scipy.sparse.csgraph import connected_components
 from scipy.special import voigt_profile
-from sklearn.neighbors import NearestNeighbors, kneighbors_graph
 from scipy.stats import ks_2samp
+from sklearn.neighbors import NearestNeighbors, kneighbors_graph
 
 # Set matplotlib and random number generator settings
 # mpl.style.use("frappe")
-plt.rc("axes", labelsize=16)
+plt.rc('axes', labelsize=16)
 rng = np.random.default_rng(1)
 console = Console()
 
@@ -64,17 +68,17 @@ g_false = 0.56
 g_min = -1.8
 g_max = 1.8
 voigt_norm = quad(lambda x: voigt_profile((x - m_omega), sigma, m_omega * G_omega / 2), m_min, m_max)
-RED = "#CC3311"
-BLUE = "#0077BB"
-PURPLE = "#AA3377"
-BLACK = "#000000"
-PALE_GRAY = "#DDDDDD"
-DARK_GRAY = "#555555"
-ERROR_RED = "#CC3311"
+RED = '#CC3311'
+BLUE = '#0077BB'
+PURPLE = '#AA3377'
+BLACK = '#000000'
+PALE_GRAY = '#DDDDDD'
+DARK_GRAY = '#555555'
+ERROR_RED = '#CC3311'
 # colors = [(136, 46, 114), (25, 101, 176), (82, 137, 199), (123, 175, 222), (78, 178, 101), (144, 201, 135), (202, 224, 171), (247, 240, 86), (246, 193, 65), (241, 147, 45), (232, 96, 28), (220, 5, 12)]
 # colors = [(r / 255, g / 255, b / 255) for r, g, b in colors]
 # CMAP = LinearSegmentedColormap.from_list("analysis", colors, N=1000)
-CMAP = "viridis"
+CMAP = 'viridis'
 
 
 # Define an Event namedtuple for easy handling of data
@@ -171,10 +175,10 @@ g_bkg_max = g_bkg(0, g_false)
 def gen_sig(n: int = 10_000) -> list:
     """Generate signal events"""
     with Progress(transient=True) as progress:
-        m_task = progress.add_task("Generating Signal (mass)", total=n)
-        w_task = progress.add_task("Generating Signal (costheta, phi)", total=n)
-        t_task = progress.add_task("Generating Signal (t)", total=n)
-        g_task = progress.add_task("Generating Signal (g)", total=n)
+        m_task = progress.add_task('Generating Signal (mass)', total=n)
+        w_task = progress.add_task('Generating Signal (costheta, phi)', total=n)
+        t_task = progress.add_task('Generating Signal (t)', total=n)
+        g_task = progress.add_task('Generating Signal (g)', total=n)
         ms = []
         while len(ms) < n:
             m_star = rng.uniform(m_min, m_max)
@@ -209,10 +213,10 @@ def gen_sig(n: int = 10_000) -> list:
 def gen_bkg(n: int = 10_000) -> list:
     """Generate background events"""
     with Progress(transient=True) as progress:
-        m_task = progress.add_task("Generating Background (mass)", total=n)
-        w_task = progress.add_task("Generating Background (costheta, phi)", total=n)
-        t_task = progress.add_task("Generating Background (t)", total=n)
-        g_task = progress.add_task("Generating Background (g)", total=n)
+        m_task = progress.add_task('Generating Background (mass)', total=n)
+        w_task = progress.add_task('Generating Background (costheta, phi)', total=n)
+        t_task = progress.add_task('Generating Background (t)', total=n)
+        g_task = progress.add_task('Generating Background (g)', total=n)
         ms = []
         while len(ms) < n:
             m_star = rng.uniform(m_min, m_max)
@@ -334,18 +338,18 @@ def parallel_event_generation(gen_function, n=10000, num_workers=4):
 
 # Calculate K-nearest neighbors for a given set of points
 def k_nearest_neighbors(x, k):
-    neighbors = NearestNeighbors(n_neighbors=k + 1, algorithm="ball_tree").fit(x)
+    neighbors = NearestNeighbors(n_neighbors=k + 1, algorithm='ball_tree').fit(x)
     _, indices = neighbors.kneighbors(x)
     return indices  # includes the point itself + k nearest neighbors
 
 
-def calculate_local_density_knn(events, phase_space, metric="euclidean"):
+def calculate_local_density_knn(events, phase_space, metric='euclidean'):
     """
     Calculate the KNN based on local density for each event.
     The function returns indices of events in the neighborhood for each event.
     """
     # Calculate pairwise distances
-    nbrs = NearestNeighbors(n_neighbors=len(events), algorithm="auto", metric=metric).fit(phase_space)
+    nbrs = NearestNeighbors(n_neighbors=len(events), algorithm='auto', metric=metric).fit(phase_space)
     distances, indices = nbrs.kneighbors(phase_space)
 
     # Estimate local density
@@ -365,11 +369,11 @@ def calculate_local_density_knn(events, phase_space, metric="euclidean"):
     return variable_knn_indices
 
 
-def calculate_radius_neighbors(events, phase_space, radius, metric="euclidean"):
+def calculate_radius_neighbors(events, phase_space, radius, metric='euclidean'):
     """
     Calculate neighbors within a specified radius for each event.
     """
-    nbrs = NearestNeighbors(radius=radius, algorithm="auto", metric=metric).fit(phase_space)
+    nbrs = NearestNeighbors(radius=radius, algorithm='auto', metric=metric).fit(phase_space)
     distances, indices = nbrs.radius_neighbors(phase_space)
 
     # Convert sparse matrix to list of lists for indices
@@ -409,7 +413,7 @@ class WeightedUnbinnedNLL:
 
 # Functions to plot event distributions and fits
 def plot_events(
-    events: list[Event], signal_events: list[Event], weights: np.ndarray | None = None, filename="events.png"
+    events: list[Event], signal_events: list[Event], weights: np.ndarray | None = None, filename='events.png'
 ):
     ms = [e.mass for e in events]
     costhetas = [e.costheta for e in events]
@@ -422,38 +426,38 @@ def plot_events(
 
     fig, ax = plt.subplots(ncols=2, nrows=2, figsize=(6, 6))
     # Plotting code...
-    weights_label = "Unweighted" if weights is None else "Weighted"
+    weights_label = 'Unweighted' if weights is None else 'Weighted'
 
     nw, bw, _ = ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, label=weights_label, color=PALE_GRAY)
-    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, histtype="step", color=ERROR_RED)
-    nt, bt, _ = ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), histtype="step", label="Truth", color="black")
+    ax[0, 0].hist(ms, bins=100, range=(m_min, m_max), weights=weights, histtype='step', color=ERROR_RED)
+    nt, bt, _ = ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), histtype='step', label='Truth', color='black')
     # ax[0, 0].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
-    ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[0, 0].set_ylabel(r"Counts / 0.002")
-    ax[0, 0].legend(loc="upper right")
+    ax[0, 0].set_xlabel(r'$M_{3\pi}$ (GeV/$c^2$)')
+    ax[0, 0].set_ylabel(r'Counts / 0.002')
+    ax[0, 0].legend(loc='upper right')
     ax[0, 1].hist2d(costhetas, phis, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], weights=weights, cmap=CMAP)
-    ax[0, 1].set_xlabel(r"$\cos(\theta)$")
-    ax[0, 1].set_ylabel(r"$\phi$")
+    ax[0, 1].set_xlabel(r'$\cos(\theta)$')
+    ax[0, 1].set_ylabel(r'$\phi$')
     nw, bw, _ = ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, label=weights_label, color=PALE_GRAY)
-    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, histtype="step", color=ERROR_RED)
-    nt, bt, _ = ax[1, 0].hist(ts_sig, bins=100, range=(t_min, t_max), histtype="step", label="Truth", color="black")
+    ax[1, 0].hist(ts, bins=100, range=(t_min, t_max), weights=weights, histtype='step', color=ERROR_RED)
+    nt, bt, _ = ax[1, 0].hist(ts_sig, bins=100, range=(t_min, t_max), histtype='step', label='Truth', color='black')
     # ax[1, 0].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
-    ax[1, 0].set_xlabel("$t$ (arb)")
-    ax[1, 0].set_ylabel(r"Counts / 0.02")
-    ax[1, 0].legend(loc="upper right")
+    ax[1, 0].set_xlabel('$t$ (arb)')
+    ax[1, 0].set_ylabel(r'Counts / 0.02')
+    ax[1, 0].legend(loc='upper right')
     nw, bw, _ = ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, label=weights_label, color=PALE_GRAY)
-    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, histtype="step", color=ERROR_RED)
-    nt, bt, _ = ax[1, 1].hist(gs_sig, bins=100, range=(g_min, g_max), histtype="step", label="Truth", color="black")
+    ax[1, 1].hist(gs, bins=100, range=(g_min, g_max), weights=weights, histtype='step', color=ERROR_RED)
+    nt, bt, _ = ax[1, 1].hist(gs_sig, bins=100, range=(g_min, g_max), histtype='step', label='Truth', color='black')
     # ax[1, 1].bar(x=bt[:-1], height=np.abs(nw - nt), bottom=np.minimum(nw, nt), width=np.diff(bt), align='edge', lw=0, color=RED, alpha=0.3)
-    ax[1, 1].set_xlabel("$g$ (arb)")
-    ax[1, 1].set_ylabel(r"Counts / 0.036")
-    ax[1, 1].legend(loc="upper right")
+    ax[1, 1].set_xlabel('$g$ (arb)')
+    ax[1, 1].set_ylabel(r'Counts / 0.036')
+    ax[1, 1].legend(loc='upper right')
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
     plt.close()
 
 
-def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename="generated_data.png"):
+def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='generated_data.png'):
     ms_sig = [e.mass for e in events_sig]
     costhetas_sig = [e.costheta for e in events_sig]
     phis_sig = [e.phi for e in events_sig]
@@ -464,43 +468,43 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename="
     phis_bkg = [e.phi for e in events_bkg]
     ts_bkg = [e.t for e in events_bkg]
     gs_bkg = [e.g for e in events_bkg]
-    fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(12, 9), sharey="col")
+    fig, ax = plt.subplots(nrows=3, ncols=4, figsize=(12, 9), sharey='col')
 
     # signal plots
-    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), label="signal", color=BLUE)
-    ax[0, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[0, 0].set_ylabel(r"Counts / 0.002")
-    ax[0, 0].legend(loc="upper right")
-    ax[0, 1].hist2d(costhetas_sig, phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="signal", cmap=CMAP)
-    ax[0, 1].set_xlabel(r"$\cos(\theta)$")
-    ax[0, 1].set_ylabel(r"$\phi$")
-    ax[0, 2].hist(ts_sig, bins=100, range=(t_min, t_max), label="signal", color=BLUE)
-    ax[0, 2].set_xlabel("$t$ (arb)")
-    ax[0, 2].set_ylabel(r"Counts / 0.02")
-    ax[0, 2].legend(loc="upper right")
-    ax[0, 3].hist(gs_sig, bins=100, range=(g_min, g_max), label="signal", color=BLUE)
-    ax[0, 3].set_xlabel("$g$ (arb)")
-    ax[0, 3].set_ylabel(r"Counts / 0.036")
-    ax[0, 3].legend(loc="upper right")
+    ax[0, 0].hist(ms_sig, bins=100, range=(m_min, m_max), label='signal', color=BLUE)
+    ax[0, 0].set_xlabel(r'$M_{3\pi}$ (GeV/$c^2$)')
+    ax[0, 0].set_ylabel(r'Counts / 0.002')
+    ax[0, 0].legend(loc='upper right')
+    ax[0, 1].hist2d(costhetas_sig, phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label='signal', cmap=CMAP)
+    ax[0, 1].set_xlabel(r'$\cos(\theta)$')
+    ax[0, 1].set_ylabel(r'$\phi$')
+    ax[0, 2].hist(ts_sig, bins=100, range=(t_min, t_max), label='signal', color=BLUE)
+    ax[0, 2].set_xlabel('$t$ (arb)')
+    ax[0, 2].set_ylabel(r'Counts / 0.02')
+    ax[0, 2].legend(loc='upper right')
+    ax[0, 3].hist(gs_sig, bins=100, range=(g_min, g_max), label='signal', color=BLUE)
+    ax[0, 3].set_xlabel('$g$ (arb)')
+    ax[0, 3].set_ylabel(r'Counts / 0.036')
+    ax[0, 3].legend(loc='upper right')
 
     # background plots
-    ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), label="background", color=RED)
-    ax[1, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[1, 0].set_ylabel(r"Counts / 0.002")
-    ax[1, 0].legend(loc="upper right")
+    ax[1, 0].hist(ms_bkg, bins=100, range=(m_min, m_max), label='background', color=RED)
+    ax[1, 0].set_xlabel(r'$M_{3\pi}$ (GeV/$c^2$)')
+    ax[1, 0].set_ylabel(r'Counts / 0.002')
+    ax[1, 0].legend(loc='upper right')
     ax[1, 1].hist2d(
-        costhetas_bkg, phis_bkg, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label="background", cmap=CMAP
+        costhetas_bkg, phis_bkg, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], label='background', cmap=CMAP
     )
-    ax[1, 1].set_xlabel(r"$\cos(\theta)$")
-    ax[1, 1].set_ylabel(r"$\phi$")
-    ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), label="background", color=RED)
-    ax[1, 2].set_xlabel("$t$ (arb)")
-    ax[1, 2].set_ylabel(r"Counts / 0.02")
-    ax[1, 2].legend(loc="upper right")
-    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), label="background", color=RED)
-    ax[1, 3].set_xlabel("$g$ (arb)")
-    ax[1, 3].set_ylabel(r"Counts / 0.036")
-    ax[1, 3].legend(loc="upper right")
+    ax[1, 1].set_xlabel(r'$\cos(\theta)$')
+    ax[1, 1].set_ylabel(r'$\phi$')
+    ax[1, 2].hist(ts_bkg, bins=100, range=(t_min, t_max), label='background', color=RED)
+    ax[1, 2].set_xlabel('$t$ (arb)')
+    ax[1, 2].set_ylabel(r'Counts / 0.02')
+    ax[1, 2].legend(loc='upper right')
+    ax[1, 3].hist(gs_bkg, bins=100, range=(g_min, g_max), label='background', color=RED)
+    ax[1, 3].set_xlabel('$g$ (arb)')
+    ax[1, 3].set_ylabel(r'Counts / 0.036')
+    ax[1, 3].legend(loc='upper right')
 
     # combined plots
     ax[2, 0].hist(
@@ -509,38 +513,38 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename="
         range=(m_min, m_max),
         stacked=True,
         color=[RED, BLUE],
-        label=["background", "signal"],
+        label=['background', 'signal'],
     )
-    ax[2, 0].set_xlabel(r"$M_{3\pi}$ (GeV/$c^2$)")
-    ax[2, 0].set_ylabel(r"Counts / 0.002")
-    ax[2, 0].legend(loc="upper right")
+    ax[2, 0].set_xlabel(r'$M_{3\pi}$ (GeV/$c^2$)')
+    ax[2, 0].set_ylabel(r'Counts / 0.002')
+    ax[2, 0].legend(loc='upper right')
     ax[2, 1].hist2d(
         costhetas_bkg + costhetas_sig, phis_bkg + phis_sig, bins=(50, 70), range=[(-1, 1), (-np.pi, np.pi)], cmap=CMAP
     )
-    ax[2, 1].set_xlabel(r"$\cos(\theta)$")
-    ax[2, 1].set_ylabel(r"$\phi$")
+    ax[2, 1].set_xlabel(r'$\cos(\theta)$')
+    ax[2, 1].set_ylabel(r'$\phi$')
     ax[2, 2].hist(
         [ts_bkg, ts_sig],
         bins=100,
         range=(t_min, t_max),
         stacked=True,
         color=[RED, BLUE],
-        label=["background", "signal"],
+        label=['background', 'signal'],
     )
-    ax[2, 2].set_xlabel("$t$ (arb)")
-    ax[2, 2].set_ylabel(r"Counts / 0.02")
-    ax[2, 2].legend(loc="upper right")
+    ax[2, 2].set_xlabel('$t$ (arb)')
+    ax[2, 2].set_ylabel(r'Counts / 0.02')
+    ax[2, 2].legend(loc='upper right')
     ax[2, 3].hist(
         [gs_bkg, gs_sig],
         bins=100,
         range=(g_min, g_max),
         stacked=True,
         color=[RED, BLUE],
-        label=["background", "signal"],
+        label=['background', 'signal'],
     )
-    ax[2, 3].set_xlabel("$g$ (arb)")
-    ax[2, 3].set_ylabel(r"Counts / 0.036")
-    ax[2, 3].legend(loc="upper right")
+    ax[2, 3].set_xlabel('$g$ (arb)')
+    ax[2, 3].set_ylabel(r'Counts / 0.036')
+    ax[2, 3].legend(loc='upper right')
 
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
@@ -558,15 +562,15 @@ def calculate_sideband_weights(events: list[Event]) -> np.ndarray:
     c = cost.UnbinnedNLL(ms, model)
     # 100% signal starting condition
     m_1 = Minuit(c, z=1.0, b=b_true)
-    m_1.limits["z"] = (0, 1)
+    m_1.limits['z'] = (0, 1)
     m_1.migrad()
     # 100% background starting condition
     m_2 = Minuit(c, z=0.0, b=b_true)
-    m_2.limits["z"] = (0, 1)
+    m_2.limits['z'] = (0, 1)
     m_2.migrad()
     # 50% signal / 50% background starting condition
     m_3 = Minuit(c, z=0.5, b=b_true)
-    m_3.limits["z"] = (0, 1)
+    m_3.limits['z'] = (0, 1)
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -595,15 +599,15 @@ def calculate_inplot(events: list[Event]) -> np.ndarray:
     c = cost.UnbinnedNLL(ms, model)
     # 100% signal starting condition
     m_1 = Minuit(c, z=1.0, b=b_true)
-    m_1.limits["z"] = (0, 1)
+    m_1.limits['z'] = (0, 1)
     m_1.migrad()
     # 100% background starting condition
     m_2 = Minuit(c, z=0.0, b=b_true)
-    m_2.limits["z"] = (0, 1)
+    m_2.limits['z'] = (0, 1)
     m_2.migrad()
     # 50% signal / 50% background starting condition
     m_3 = Minuit(c, z=0.5, b=b_true)
-    m_3.limits["z"] = (0, 1)
+    m_3.limits['z'] = (0, 1)
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -626,19 +630,19 @@ def calculate_q_factors(
     knn_indices = []
 
     if use_density_knn:
-        tag = "_density"
+        tag = '_density'
         # Calculate KNN based on local density
-        with console.status("Calculating K-Nearest Neighbors Based on Local Density"):
+        with console.status('Calculating K-Nearest Neighbors Based on Local Density'):
             knn_indices = calculate_local_density_knn(events, phase_space)
     elif use_radius_knn:
-        tag = "_radius"
+        tag = '_radius'
         radius = float(use_radius_knn)
-        with console.status("Calculating Radius Neighbors"):
+        with console.status('Calculating Radius Neighbors'):
             knn_indices = calculate_radius_neighbors(events, phase_space, radius)
     else:
-        tag = ""
+        tag = ''
         # Standard KNN calculation
-        with console.status("Calculating K-Nearest Neighbors"):
+        with console.status('Calculating K-Nearest Neighbors'):
             indices = k_nearest_neighbors(phase_space, num_knn)
             # Exclude the first index for each event since it is the event itself
             knn_indices = [index_set[1:] for index_set in indices]
@@ -651,20 +655,20 @@ def calculate_q_factors(
 
     q_factors = []
     sq_factors = []
-    for i in track(range(len(events)), description="Calculating Q-Factors"):
+    for i in track(range(len(events)), description='Calculating Q-Factors'):
         indices = knn_indices[i]
         c = cost.UnbinnedNLL(ms[indices], model)
         # 100% signal starting condition
         m_1 = Minuit(c, z=1.0, b=b_true)
-        m_1.limits["z"] = (0, 1)
+        m_1.limits['z'] = (0, 1)
         m_1.migrad()
         # 100% background starting condition
         m_2 = Minuit(c, z=0.0, b=b_true)
-        m_2.limits["z"] = (0, 1)
+        m_2.limits['z'] = (0, 1)
         m_2.migrad()
         # 50% signal / 50% background starting condition
         m_3 = Minuit(c, z=0.5, b=b_true)
-        m_3.limits["z"] = (0, 1)
+        m_3.limits['z'] = (0, 1)
         m_3.migrad()
         fits = [m_1, m_2, m_3]
         nlls = np.array([m.fval for m in fits])
@@ -688,7 +692,7 @@ def calculate_q_factors(
         try:
             V = np.linalg.inv(Vmat_inv)
         except np.linalg.LinAlgError:
-            print("Encountered a singular matrix, applying regularization.")
+            print('Encountered a singular matrix, applying regularization.')
             epsilon = 1e-5  # Small regularization term
             Vmat_inv_reg = Vmat_inv + epsilon * np.eye(Vmat_inv.shape[0])
             V = np.linalg.inv(Vmat_inv_reg)
@@ -704,7 +708,7 @@ def calculate_q_factors(
                 z_fit=best_fit.values[0],
                 b_fit=best_fit.values[1],
                 event_index=i,
-                qfactor_type=f"{name}{tag}",
+                qfactor_type=f'{name}{tag}',
             )
     return np.array(q_factors), np.array(sq_factors)
 
@@ -719,14 +723,14 @@ def calculate_splot_weights(events: list[Event], sig_frac_init=0.5, b_init=0.5) 
     # Performing the fit
     c = cost.UnbinnedNLL(ms, model)
     mi = Minuit(c, sig_frac=sig_frac_init, b=b_init)
-    mi.limits["sig_frac"] = (0, 1)  # Ensuring physical bounds
-    mi.limits["b"] = (0, 1)
+    mi.limits['sig_frac'] = (0, 1)  # Ensuring physical bounds
+    mi.limits['b'] = (0, 1)
     mi.migrad()
 
     # Extract fit results for signal and background contributions
-    n_sig = len(events) * mi.values["sig_frac"]
-    n_bkg = len(events) * (1 - mi.values["sig_frac"])
-    b = mi.values["b"]
+    n_sig = len(events) * mi.values['sig_frac']
+    n_bkg = len(events) * (1 - mi.values['sig_frac'])
+    b = mi.values['b']
 
     # Calculate inverse variance matrix elements
     V_ss_inv = np.sum([m_sig(m) ** 2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms])
@@ -764,6 +768,7 @@ def fit_angles(
 
     m = Minuit(_cost, p00=p00_true, p1n1=p1n1_true, p10=p10_true)
     m.migrad()
+    m.minos(cl=1)
     return m
 
 
@@ -778,6 +783,7 @@ def fit_t(events: list[Event], weights: np.ndarray | None = None):
 
     m = Minuit(_cost, tau=t_true)
     m.migrad()
+    m.minos(cl=1)
     return m
 
 
@@ -792,6 +798,7 @@ def fit_g(events: list[Event], weights: np.ndarray | None = None):
 
     m = Minuit(_cost, g=g_true)
     m.migrad()
+    m.minos(cl=1)
     return m
 
 
@@ -802,30 +809,30 @@ def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qf
 
     plt.figure(figsize=(10, 6))
     # Scatter plot of selected masses
-    plt.hist(ms, bins=30, label="Selected Events Masses", density=True, color=PALE_GRAY)
-    plt.hist(ms, bins=30, density=True, histtype="step", color=DARK_GRAY)
+    plt.hist(ms, bins=30, label='Selected Events Masses', density=True, color=PALE_GRAY)
+    plt.hist(ms, bins=30, density=True, histtype='step', color=DARK_GRAY)
 
     # Plot fit components
     m_range = np.linspace(m_min, m_max, 1000)
-    plt.axvline(mstar, ls=":", lw=2, color=BLACK, label="Event")
-    plt.plot(m_range, [z_fit * m_sig(m_val) for m_val in m_range], ls="-", lw=2, color=BLUE, label="Signal Fit")
+    plt.axvline(mstar, ls=':', lw=2, color=BLACK, label='Event')
+    plt.plot(m_range, [z_fit * m_sig(m_val) for m_val in m_range], ls='-', lw=2, color=BLUE, label='Signal Fit')
     plt.plot(
         m_range,
         [(1 - z_fit) * m_bkg(m_val, b_fit) for m_val in m_range],
-        ls="--",
+        ls='--',
         lw=2,
         color=RED,
-        label="Background Fit",
+        label='Background Fit',
     )
     plt.plot(
-        m_range, [model(m_val, z_fit, b_fit) for m_val in m_range], ls="-", lw=2.5, color=PURPLE, label="Total Fit"
+        m_range, [model(m_val, z_fit, b_fit) for m_val in m_range], ls='-', lw=2.5, color=PURPLE, label='Total Fit'
     )
 
-    plt.xlabel("Mass")
-    plt.ylabel("Density")
-    plt.title(f"Fit for Event {event_index} and its Nearest Neighbors")
+    plt.xlabel('Mass')
+    plt.ylabel('Density')
+    plt.title(f'Fit for Event {event_index} and its Nearest Neighbors')
     plt.legend()
-    plt.savefig(f"qfactors_{qfactor_type}_{event_index}.png", dpi=300)
+    plt.savefig(f'qfactors_{qfactor_type}_{event_index}.png', dpi=300)
     plt.close()
 
 
@@ -840,136 +847,146 @@ def plot_radius_knn_visualization(events, selected_event_index, radius_knn):
 
     # Plotting
     plt.figure(figsize=(10, 6))
-    plt.scatter(x_coords, y_coords, label="Events")
+    plt.scatter(x_coords, y_coords, label='Events')
     circle = plt.Circle(
-        (selected_event_x, selected_event_y), radius_knn, color="r", fill=False, linewidth=2, label="Radius KNN"
+        (selected_event_x, selected_event_y), radius_knn, color='r', fill=False, linewidth=2, label='Radius KNN'
     )
     plt.gca().add_patch(circle)
 
     # Highlight the selected event
-    plt.scatter([selected_event_x], [selected_event_y], color="red", label="Selected Event")
+    plt.scatter([selected_event_x], [selected_event_y], color='red', label='Selected Event')
 
-    plt.xlabel("cosTheta")
-    plt.ylabel("phi")
-    plt.title(f"Visualization of Radius KNN ({radius_knn}) Neighborhood")
+    plt.xlabel('cosTheta')
+    plt.ylabel('phi')
+    plt.title(f'Visualization of Radius KNN ({radius_knn}) Neighborhood')
     plt.legend()
     plt.grid(True)
-    plt.axis("equal")
+    plt.axis('equal')
     plt.show()
+
+
 def calculate_theoretical_q_factors(events, b_true):
     """
     Compute theoretical Q-factors based on the true underlying model.
     """
     # Extract the masses from all events as a NumPy array
     masses = np.array([event.mass for event in events])
-    
+
     # Calculate signal and background densities using the vectorized functions
     signal_densities = m_sig(masses)
+    console.print(signal_densities)
     background_densities = m_bkg(masses, b_true)
-    
+    console.print(background_densities)
+
     # Calculate total densities
     total_densities = signal_densities + background_densities
-    
+    console.print(total_densities)
+
     # Calculate Q-factors, handling division by zero by using np.where
     q_factors_theoretical = np.where(total_densities > 0, signal_densities / total_densities, 0)
-    
+
     return q_factors_theoretical
 
-def compare_q_factors(events, q_factors_calculated, b_true, title='Q-Factors Comparison', q_factor_type='standard'):
+
+def compare_q_factors(
+    q_factors_calculated, q_factors_theoretical, title='Q-Factors Comparison', q_factor_type='standard'
+):
     """
     Compare calculated Q-factors to the theoretical Q-factor distribution.
     """
-    # Generate theoretical Q-factor distribution
-    q_factors_theoretical = calculate_theoretical_q_factors(events, b_true)
-    q_factors_theoretical = q_factors_theoretical.flatten()
-
     # Visual comparison using histograms
     plt.figure(figsize=(12, 6))
-    plt.scatter(q_factors_theoretical, q_factors_calculated, alpha=0.5, label='Data Points')
-    plt.plot([0, 1], [0, 1], 'r-', label='Qcalc = Qgen')  # Red line for Qcalc = Qgen
-    plt.xlabel('Generated Q-factors (Qgen)')
-    plt.ylabel('Calculated Q-factors (Qcalc)')
+    plt.scatter(q_factors_theoretical, q_factors_calculated, alpha=0.5, label='Data', color=BLUE)
+    plt.plot(
+        [0, 1], [0, 1], ls='-', color=RED, label=r'$Q_{\text{calc}} = Q_{\text{gen}}$'
+    )  # Red line for Qcalc = Qgen
+    plt.xlabel(r'Generated Q-factors ($Q_{\text{gen}}$)')
+    plt.ylabel(r'Calculated Q-factors ($Q_{\text{calc}}$)')
     plt.title('Calculated vs. Generated Q-factors')
     plt.legend()
     plt.grid(True)
     plt.xlim(0, 1)
-    plt.ylim(0, 1)
-    plt.savefig(f'Gen_Calc_comparison_{q_factor_type}.png')  
+    plt.ylim(-1, 2)
+    plt.savefig(f'theory_comparison_{q_factor_type}.png', dpi=300)
     plt.close()
 
     q_factors_difference = q_factors_calculated - q_factors_theoretical
 
     plt.figure(figsize=(12, 6))
-    plt.hist(q_factors_difference, bins=50, alpha=0.75, color='blue', edgecolor='black')
-    plt.xlabel('Qcalc - Qgen')
+    plt.hist(q_factors_difference, bins=50, range=(-1.0, 1.0), color=BLUE)
+    plt.xlabel(r'$Q_{\text{calc}} - Q_{\text{gen}}$')
     plt.ylabel('Frequency')
     plt.title('Difference Between Calculated and Generated Q-factors')
-    plt.grid(True)
-    plt.savefig(f'Gen_Calc_subtract_{q_factor_type}.png')  
+    plt.savefig(f'theory_comparison_subtract_{q_factor_type}.png', dpi=300)
     plt.close()
 
     # Quantitative comparison using Kolmogorov-Smirnov test
     ks_stat, ks_p_value = ks_2samp(q_factors_calculated, q_factors_theoretical)
-    print(f"KS Statistic: {ks_stat}, P-value: {ks_p_value}")
+    console.print(f'KS Statistic: {ks_stat}, P-value: {ks_p_value}')
     if ks_p_value < 0.05:
-        print("The calculated Q-factors distribution is significantly different from the theoretical distribution.")
+        console.print(
+            'The calculated Q-factors distribution is [red]significantly different[/] from the theoretical distribution.'
+        )
     else:
-        print("The calculated Q-factors distribution is not significantly different from the theoretical distribution.")
+        console.print(
+            'The calculated Q-factors distribution is [blue]not significantly different[/] from the theoretical distribution.'
+        )
+
 
 def main():
     args = docopt(__doc__)
 
-    num_sig = int(args["--num-sig"])
-    num_bkg = int(args["--num-bkg"])
-    num_knn = int(args["--knn"])
-    use_density_knn = args["--density-knn"]
-    use_radius_knn = args["--radius-knn"]
-    comp_calc_gen = args["--calc-gen"]
-    
-    if use_radius_knn != "None":
+    num_sig = int(args['--num-sig'])
+    num_bkg = int(args['--num-bkg'])
+    num_knn = int(args['--knn'])
+    use_density_knn = args['--density-knn']
+    use_radius_knn = args['--radius-knn']
+    comp_calc_gen = args['--calc-gen']
+
+    if use_radius_knn != 'None':
         try:
             use_radius_knn = float(use_radius_knn)
         except ValueError:
-            raise ValueError(f"Invalid value for --radius_knn: {use_radius_knn}")
+            raise ValueError(f'Invalid value for --radius_knn: {use_radius_knn}')
     else:
         use_radius_knn = None
-    tag = ""
+    tag = ''
     if use_density_knn:
-        tag = "_density"
+        tag = '_density'
     elif use_radius_knn:
-        tag = "_radius"
+        tag = '_radius'
 
-    parallel = args["--parallel"]
+    parallel = args['--parallel']
 
     if parallel:
         # Generate events in parallel.
-        console.print("Generating signal and background events in parallel ...")
+        console.print('Generating signal and background events in parallel ...')
         events_sig = parallel_event_generation(gen_event_partial, n=num_sig, num_workers=4)
         events_bkg = parallel_event_generation(gen_bkg_event_partial, n=num_bkg, num_workers=4)
     else:
         # Default to sequential generation.
-        console.print("Generating signal and background events sequentially ...")
+        console.print('Generating signal and background events sequentially ...')
         events_sig = gen_sig(n=num_sig)
         events_bkg = gen_bkg(n=num_bkg)
 
-    with console.status("Plotting events"):
-        plot_all_events(events_sig, events_bkg, filename="all_events.png")
+    with console.status('Plotting events'):
+        plot_all_events(events_sig, events_bkg, filename='all_events.png')
     events_all = events_sig + events_bkg
 
-    t = Table(title="Fit Results")
-    t.add_column("Weighting Method")
-    t.add_column("ρ⁰₀₀")
-    t.add_column("ρ⁰₁,₋₁")
-    t.add_column("Re[ρ⁰₁₀]")
-    t.add_column("τ")
-    t.add_column("σ")
+    t = Table(title='Fit Results')
+    t.add_column('Weighting Method')
+    t.add_column('ρ⁰₀₀')
+    t.add_column('ρ⁰₁,₋₁')
+    t.add_column('Re[ρ⁰₁₀]')
+    t.add_column('τ')
+    t.add_column('σ')
     t.add_row(
-        "Truth",
-        f"{p00_true:.3f}",
-        f"{p1n1_true:.3f}",
-        f"{p10_true:.3f}",
-        f"{t_true:.3f}",
-        f"{g_true:.3f}",
+        'Truth',
+        f'{p00_true:.3f}',
+        f'{p1n1_true:.3f}',
+        f'{p10_true:.3f}',
+        f'{t_true:.3f}',
+        f'{g_true:.3f}',
         end_section=True,
     )
     latex_table = rf"""
@@ -984,20 +1001,26 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
 
     def colorize_by_number(
         fit: float,
-        error: float,
+        error: float | MError,
         true: float,
-        sep="±",
-        prefix="[{color}]",
-        suffix="[/]",
-        good="default",
-        bad="yellow",
-        worst="red",
+        sep='±',
+        prefix='[{color}]',
+        suffix='[/]',
+        good='default',
+        bad='yellow',
+        worst='red',
     ) -> str:
+        if isinstance(error, MError):
+            if (fit < true + error.lower * 5) or (fit > true + error.upper * 5):
+                return f'{prefix.format(color=worst)}{fit:.3f}^{{{error.upper:+.3f}}}_{{{error.lower:+.3f}}}{suffix}'
+            if (fit < true + error.lower * 3) or (fit > true + error.upper * 3):
+                return f'{prefix.format(color=bad)}{fit:.3f}^{{{error.upper:+.3f}}}_{{{error.lower:+.3f}}}{suffix}'
+            return f'{prefix.format(color=good)}{fit:.3f}^{{{error.upper:+.3f}}}_{{{error.lower:+.3f}}}{suffix}'
         if abs(fit - true) > error * 5:
-            return f"{prefix.format(color=worst)}{fit:.3f}{sep}{error:.3f}{suffix}"
+            return f'{prefix.format(color=worst)}{fit:.3f}{sep}{error:.3f}{suffix}'
         if abs(fit - true) > error * 3:
-            return f"{prefix.format(color=bad)}{fit:.3f}{sep}{error:.3f}{suffix}"
-        return f"{prefix.format(color=good)}{fit:.3f}{sep}{error:.3f}{suffix}"
+            return f'{prefix.format(color=bad)}{fit:.3f}{sep}{error:.3f}{suffix}'
+        return f'{prefix.format(color=good)}{fit:.3f}{sep}{error:.3f}{suffix}'
 
     def get_results(events, weights=None, latex=False):
         m_angles = fit_angles(events, weights=weights)
@@ -1005,123 +1028,123 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         res_g = fit_g(events, weights=weights)
         if latex:
             p00_fit = colorize_by_number(
-                m_angles.values["p00"],
-                m_angles.errors["p00"],
+                m_angles.values['p00'],
+                m_angles.errors['p00'],
                 p00_true,
-                sep=r"\pm",
-                prefix=r"{{\color{{{color}}}$",
-                suffix=r"$}",
-                good="black",
-                bad="black",
-                worst="red",
+                sep=r'\pm',
+                prefix=r'{{\color{{{color}}}$',
+                suffix=r'$}',
+                good='black',
+                bad='black',
+                worst='red',
             )
             p1n1_fit = colorize_by_number(
-                m_angles.values["p1n1"],
-                m_angles.errors["p1n1"],
+                m_angles.values['p1n1'],
+                m_angles.errors['p1n1'],
                 p1n1_true,
-                sep=r"\pm",
-                prefix=r"{{\color{{{color}}}$",
-                suffix=r"$}",
-                good="black",
-                bad="black",
-                worst="red",
+                sep=r'\pm',
+                prefix=r'{{\color{{{color}}}$',
+                suffix=r'$}',
+                good='black',
+                bad='black',
+                worst='red',
             )
             p10_fit = colorize_by_number(
-                m_angles.values["p10"],
-                m_angles.errors["p10"],
+                m_angles.values['p10'],
+                m_angles.errors['p10'],
                 p10_true,
-                sep=r"\pm",
-                prefix=r"{{\color{{{color}}}$",
-                suffix=r"$}",
-                good="black",
-                bad="black",
-                worst="red",
+                sep=r'\pm',
+                prefix=r'{{\color{{{color}}}$',
+                suffix=r'$}',
+                good='black',
+                bad='black',
+                worst='red',
             )
             t_fit = colorize_by_number(
-                res_t.values["tau"],
-                res_t.errors["tau"],
+                res_t.values['tau'],
+                res_t.errors['tau'],
                 t_true,
-                sep=r"\pm",
-                prefix=r"{{\color{{{color}}}$",
-                suffix=r"$}",
-                good="black",
-                bad="black",
-                worst="red",
+                sep=r'\pm',
+                prefix=r'{{\color{{{color}}}$',
+                suffix=r'$}',
+                good='black',
+                bad='black',
+                worst='red',
             )
             g_fit = colorize_by_number(
-                res_g.values["g"],
-                res_g.errors["g"],
+                res_g.values['g'],
+                res_g.errors['g'],
                 g_true,
-                sep=r"\pm",
-                prefix=r"{{\color{{{color}}}$",
-                suffix=r"$}",
-                good="black",
-                bad="black",
-                worst="red",
+                sep=r'\pm',
+                prefix=r'{{\color{{{color}}}$',
+                suffix=r'$}',
+                good='black',
+                bad='black',
+                worst='red',
             )
             return [p00_fit, p1n1_fit, p10_fit, t_fit, g_fit]
 
         p00_fit = colorize_by_number(
-            m_angles.values["p00"],
-            m_angles.errors["p00"],
+            m_angles.values['p00'],
+            m_angles.errors['p00'],
             p00_true,
         )
         p1n1_fit = colorize_by_number(
-            m_angles.values["p1n1"],
-            m_angles.errors["p1n1"],
+            m_angles.values['p1n1'],
+            m_angles.errors['p1n1'],
             p1n1_true,
         )
         p10_fit = colorize_by_number(
-            m_angles.values["p10"],
-            m_angles.errors["p10"],
+            m_angles.values['p10'],
+            m_angles.errors['p10'],
             p10_true,
         )
-        t_fit = colorize_by_number(res_t.values["tau"], res_t.errors["tau"], t_true)
-        g_fit = colorize_by_number(res_g.values["g"], res_g.errors["g"], g_true)
+        t_fit = colorize_by_number(res_t.values['tau'], res_t.errors['tau'], t_true)
+        g_fit = colorize_by_number(res_g.values['g'], res_g.errors['g'], g_true)
         return [p00_fit, p1n1_fit, p10_fit, t_fit, g_fit]
 
-    plot_events(events_bkg, events_sig, weights=None, filename="bkg_no_weights.png")
-    plot_events(events_sig, events_sig, weights=None, filename="sig_no_weights.png")
-    plot_events(events_all, events_sig, weights=None, filename="all_no_weights.png")
-    t.add_row("None", *get_results(events_all, weights=None))
+    plot_events(events_bkg, events_sig, weights=None, filename='bkg_no_weights.png')
+    plot_events(events_sig, events_sig, weights=None, filename='sig_no_weights.png')
+    plot_events(events_all, events_sig, weights=None, filename='all_no_weights.png')
+    t.add_row('None', *get_results(events_all, weights=None))
     latex_table += (
-        rf"No Weights & {' & '.join(get_results(events_all, weights=None, latex=True))} \\ \cmidrule(lr){{2-6}}" + "\n"
+        rf"No Weights & {' & '.join(get_results(events_all, weights=None, latex=True))} \\ \cmidrule(lr){{2-6}}" + '\n'
     )
     # console.print(t)
     # console.print(latex_table)
 
     sideband_weights = calculate_sideband_weights(events_all)
-    plot_events(events_bkg, events_sig, weights=sideband_weights[num_sig:], filename="bkg_sideband.png")
-    plot_events(events_sig, events_sig, weights=sideband_weights[:num_sig], filename="sig_sideband.png")
-    plot_events(events_all, events_sig, weights=sideband_weights, filename="all_sideband.png")
-    t.add_row("Sideband Subtraction", *get_results(events_all, weights=sideband_weights))
+    plot_events(events_bkg, events_sig, weights=sideband_weights[num_sig:], filename='bkg_sideband.png')
+    plot_events(events_sig, events_sig, weights=sideband_weights[:num_sig], filename='sig_sideband.png')
+    plot_events(events_all, events_sig, weights=sideband_weights, filename='all_sideband.png')
+    t.add_row('Sideband Subtraction', *get_results(events_all, weights=sideband_weights))
     latex_table += (
         rf"Sideband Subtraction & {' & '.join(get_results(events_all, weights=sideband_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + "\n"
+        + '\n'
     )
     # console.print(t)
     # console.print(latex_table)
 
     inplot_weights = calculate_inplot(events_all)
-    plot_events(events_bkg, events_sig, weights=inplot_weights[num_sig:], filename="bkg_inplot.png")
-    plot_events(events_sig, events_sig, weights=inplot_weights[:num_sig], filename="sig_inplot.png")
-    plot_events(events_all, events_sig, weights=inplot_weights, filename="all_inplot.png")
-    t.add_row("inPlot", *get_results(events_all, weights=inplot_weights))
+    plot_events(events_bkg, events_sig, weights=inplot_weights[num_sig:], filename='bkg_inplot.png')
+    plot_events(events_sig, events_sig, weights=inplot_weights[:num_sig], filename='sig_inplot.png')
+    plot_events(events_all, events_sig, weights=inplot_weights, filename='all_inplot.png')
+    t.add_row('inPlot', *get_results(events_all, weights=inplot_weights))
     latex_table += (
         rf"inPlot (Q-factors with $k=N$) & {' & '.join(get_results(events_all, weights=inplot_weights, latex=True))} \\"
-        + "\n"
+        + '\n'
     )
     # console.print(t)
     # console.print(latex_table)
 
     splot_weights = calculate_splot_weights(events_all)[:, 0]
-    plot_events(events_bkg, events_sig, weights=splot_weights[num_sig:], filename="bkg_splot.png")
-    plot_events(events_sig, events_sig, weights=splot_weights[:num_sig], filename="sig_splot.png")
-    plot_events(events_all, events_sig, weights=splot_weights, filename="all_splot.png")
-    t.add_row("sPlot", *get_results(events_all, weights=splot_weights))
+    plot_events(events_bkg, events_sig, weights=splot_weights[num_sig:], filename='bkg_splot.png')
+    plot_events(events_sig, events_sig, weights=splot_weights[:num_sig], filename='sig_splot.png')
+    plot_events(events_all, events_sig, weights=splot_weights, filename='all_splot.png')
+    t.add_row('sPlot', *get_results(events_all, weights=splot_weights))
     latex_table += (
         rf"sPlot & {' & '.join(get_results(events_all, weights=splot_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + "\n"
+        + '\n'
     )
     # console.print(t)
     # console.print(latex_table)
@@ -1129,26 +1152,26 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
     q_factors_weights, sq_factors_weights = calculate_q_factors(
         events_all,
         phase_space=np.array([[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]),
-        name="angles",
+        name='angles',
         num_knn=num_knn,
         use_density_knn=use_density_knn,
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
     )
-    plot_events(events_bkg, events_sig, weights=q_factors_weights[num_sig:], filename=f"bkg_q_factor{tag}.png")
-    plot_events(events_sig, events_sig, weights=q_factors_weights[:num_sig], filename=f"sig_q_factor{tag}.png")
-    plot_events(events_all, events_sig, weights=q_factors_weights, filename=f"all_q_factor{tag}.png")
-    t.add_row("Q-Factors", *get_results(events_all, weights=q_factors_weights))
+    plot_events(events_bkg, events_sig, weights=q_factors_weights[num_sig:], filename=f'bkg_q_factor{tag}.png')
+    plot_events(events_sig, events_sig, weights=q_factors_weights[:num_sig], filename=f'sig_q_factor{tag}.png')
+    plot_events(events_all, events_sig, weights=q_factors_weights, filename=f'all_q_factor{tag}.png')
+    t.add_row('Q-Factors', *get_results(events_all, weights=q_factors_weights))
     latex_table += (
-        rf"Q-Factors ($k=100$) & {' & '.join(get_results(events_all, weights=q_factors_weights, latex=True))} \\" + "\n"
+        rf"Q-Factors ($k=100$) & {' & '.join(get_results(events_all, weights=q_factors_weights, latex=True))} \\" + '\n'
     )
-    plot_events(events_bkg, events_sig, weights=sq_factors_weights[num_sig:], filename=f"bkg_sq_factor{tag}.png")
-    plot_events(events_sig, events_sig, weights=sq_factors_weights[:num_sig], filename=f"sig_sq_factor{tag}.png")
-    plot_events(events_all, events_sig, weights=sq_factors_weights, filename=f"all_sq_factor{tag}.png")
-    t.add_row("sQ-Factors", *get_results(events_all, weights=sq_factors_weights))
+    plot_events(events_bkg, events_sig, weights=sq_factors_weights[num_sig:], filename=f'bkg_sq_factor{tag}.png')
+    plot_events(events_sig, events_sig, weights=sq_factors_weights[:num_sig], filename=f'sig_sq_factor{tag}.png')
+    plot_events(events_all, events_sig, weights=sq_factors_weights, filename=f'all_sq_factor{tag}.png')
+    t.add_row('sQ-Factors', *get_results(events_all, weights=sq_factors_weights))
     latex_table += (
         rf"sQ-Factors ($k=100$) & {' & '.join(get_results(events_all, weights=sq_factors_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + "\n"
+        + '\n'
     )
     # console.print(t)
     # console.print(latex_table)
@@ -1158,27 +1181,27 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         phase_space=np.array(
             [[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3), e.t / ((t_max**3 - t_min**3) / 3)] for e in events_all]
         ),
-        name="angles_t",
+        name='angles_t',
         num_knn=num_knn,
         use_density_knn=use_density_knn,
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
     )
-    plot_events(events_bkg, events_sig, weights=q_factors_t_weights[num_sig:], filename=f"bkg_q_factor_t{tag}.png")
-    plot_events(events_sig, events_sig, weights=q_factors_t_weights[:num_sig], filename=f"sig_q_factor_t{tag}.png")
-    plot_events(events_all, events_sig, weights=q_factors_t_weights, filename=f"all_q_factor_t{tag}.png")
-    t.add_row("Q-Factors (with t)", *get_results(events_all, weights=q_factors_t_weights))
+    plot_events(events_bkg, events_sig, weights=q_factors_t_weights[num_sig:], filename=f'bkg_q_factor_t{tag}.png')
+    plot_events(events_sig, events_sig, weights=q_factors_t_weights[:num_sig], filename=f'sig_q_factor_t{tag}.png')
+    plot_events(events_all, events_sig, weights=q_factors_t_weights, filename=f'all_q_factor_t{tag}.png')
+    t.add_row('Q-Factors (with t)', *get_results(events_all, weights=q_factors_t_weights))
     latex_table += (
         rf"Q-Factors (with t) & {' & '.join(get_results(events_all, weights=q_factors_t_weights, latex=True))} \\"
-        + "\n"
+        + '\n'
     )
-    plot_events(events_bkg, events_sig, weights=sq_factors_t_weights[num_sig:], filename=f"bkg_sq_factor_t{tag}.png")
-    plot_events(events_sig, events_sig, weights=sq_factors_t_weights[:num_sig], filename=f"sig_sq_factor_t{tag}.png")
-    plot_events(events_all, events_sig, weights=sq_factors_t_weights, filename=f"all_sq_factor_t{tag}.png")
-    t.add_row("sQ-Factors (with t)", *get_results(events_all, weights=sq_factors_t_weights))
+    plot_events(events_bkg, events_sig, weights=sq_factors_t_weights[num_sig:], filename=f'bkg_sq_factor_t{tag}.png')
+    plot_events(events_sig, events_sig, weights=sq_factors_t_weights[:num_sig], filename=f'sig_sq_factor_t{tag}.png')
+    plot_events(events_all, events_sig, weights=sq_factors_t_weights, filename=f'all_sq_factor_t{tag}.png')
+    t.add_row('sQ-Factors (with t)', *get_results(events_all, weights=sq_factors_t_weights))
     latex_table += (
         rf"sQ-Factors (with t) & {' & '.join(get_results(events_all, weights=sq_factors_t_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + "\n"
+        + '\n'
     )
     # console.print(t)
     # console.print(latex_table)
@@ -1188,27 +1211,27 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         phase_space=np.array(
             [[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3), e.g / ((g_max**3 - g_min**3) / 3)] for e in events_all]
         ),
-        name="angles_g",
+        name='angles_g',
         num_knn=num_knn,
         use_density_knn=use_density_knn,
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
     )
-    plot_events(events_bkg, events_sig, weights=q_factors_g_weights[num_sig:], filename=f"bkg_q_factor_g{tag}.png")
-    plot_events(events_sig, events_sig, weights=q_factors_g_weights[:num_sig], filename=f"sig_q_factor_g{tag}.png")
-    plot_events(events_all, events_sig, weights=q_factors_g_weights, filename=f"all_q_factor_g{tag}.png")
-    t.add_row("Q-Factors (with g)", *get_results(events_all, weights=q_factors_g_weights))
+    plot_events(events_bkg, events_sig, weights=q_factors_g_weights[num_sig:], filename=f'bkg_q_factor_g{tag}.png')
+    plot_events(events_sig, events_sig, weights=q_factors_g_weights[:num_sig], filename=f'sig_q_factor_g{tag}.png')
+    plot_events(events_all, events_sig, weights=q_factors_g_weights, filename=f'all_q_factor_g{tag}.png')
+    t.add_row('Q-Factors (with g)', *get_results(events_all, weights=q_factors_g_weights))
     latex_table += (
         rf"Q-Factors (with g) & {' & '.join(get_results(events_all, weights=q_factors_g_weights, latex=True))} \\"
-        + "\n"
+        + '\n'
     )
-    plot_events(events_bkg, events_sig, weights=sq_factors_g_weights[num_sig:], filename=f"bkg_sq_factor_g{tag}.png")
-    plot_events(events_sig, events_sig, weights=sq_factors_g_weights[:num_sig], filename=f"sig_sq_factor_g{tag}.png")
-    plot_events(events_all, events_sig, weights=sq_factors_g_weights, filename=f"all_sq_factor_g{tag}.png")
-    t.add_row("sQ-Factors (with g)", *get_results(events_all, weights=sq_factors_g_weights))
+    plot_events(events_bkg, events_sig, weights=sq_factors_g_weights[num_sig:], filename=f'bkg_sq_factor_g{tag}.png')
+    plot_events(events_sig, events_sig, weights=sq_factors_g_weights[:num_sig], filename=f'sig_sq_factor_g{tag}.png')
+    plot_events(events_all, events_sig, weights=sq_factors_g_weights, filename=f'all_sq_factor_g{tag}.png')
+    t.add_row('sQ-Factors (with g)', *get_results(events_all, weights=sq_factors_g_weights))
     latex_table += (
         rf"sQ-Factors (with g) & {' & '.join(get_results(events_all, weights=sq_factors_g_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + "\n"
+        + '\n'
     )
     # console.print(t)
     # console.print(latex_table)
@@ -1226,31 +1249,31 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
                 for e in events_all
             ]
         ),
-        name="angles_t_g",
+        name='angles_t_g',
         num_knn=num_knn,
         use_density_knn=use_density_knn,
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
     )
-    plot_events(events_bkg, events_sig, weights=q_factors_t_g_weights[num_sig:], filename=f"bkg_q_factor_t_g{tag}.png")
-    plot_events(events_sig, events_sig, weights=q_factors_t_g_weights[:num_sig], filename=f"sig_q_factor_t_g{tag}.png")
-    plot_events(events_all, events_sig, weights=q_factors_t_g_weights, filename=f"all_q_factor_t_g{tag}.png")
-    t.add_row("Q-Factors (with t and g)", *get_results(events_all, weights=q_factors_t_g_weights))
+    plot_events(events_bkg, events_sig, weights=q_factors_t_g_weights[num_sig:], filename=f'bkg_q_factor_t_g{tag}.png')
+    plot_events(events_sig, events_sig, weights=q_factors_t_g_weights[:num_sig], filename=f'sig_q_factor_t_g{tag}.png')
+    plot_events(events_all, events_sig, weights=q_factors_t_g_weights, filename=f'all_q_factor_t_g{tag}.png')
+    t.add_row('Q-Factors (with t and g)', *get_results(events_all, weights=q_factors_t_g_weights))
     latex_table += (
         rf"Q-Factors (with t and g) & {' & '.join(get_results(events_all, weights=q_factors_t_g_weights, latex=True))} \\"
-        + "\n"
+        + '\n'
     )
     plot_events(
-        events_bkg, events_sig, weights=sq_factors_t_g_weights[num_sig:], filename=f"bkg_sq_factor_t_g{tag}.png"
+        events_bkg, events_sig, weights=sq_factors_t_g_weights[num_sig:], filename=f'bkg_sq_factor_t_g{tag}.png'
     )
     plot_events(
-        events_sig, events_sig, weights=sq_factors_t_g_weights[:num_sig], filename=f"sig_sq_factor_t_g{tag}.png"
+        events_sig, events_sig, weights=sq_factors_t_g_weights[:num_sig], filename=f'sig_sq_factor_t_g{tag}.png'
     )
-    plot_events(events_all, events_sig, weights=sq_factors_t_g_weights, filename=f"all_sq_factor_t_g{tag}.png")
-    t.add_row("sQ-Factors (with t and g)", *get_results(events_all, weights=sq_factors_t_g_weights))
+    plot_events(events_all, events_sig, weights=sq_factors_t_g_weights, filename=f'all_sq_factor_t_g{tag}.png')
+    t.add_row('sQ-Factors (with t and g)', *get_results(events_all, weights=sq_factors_t_g_weights))
     latex_table += (
         rf"sQ-Factors (with t and g) & {' & '.join(get_results(events_all, weights=sq_factors_t_g_weights, latex=True))} \\ \bottomrule"
-        + "\n"
+        + '\n'
     )
     # console.print(t)
     # console.print(latex_table)
@@ -1270,16 +1293,41 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
     if comp_calc_gen:
         # Theoretical model remains constant across variants
         q_factors_theoretical = calculate_theoretical_q_factors(events_all, b_true)
+        # q_factors_theoretical = inplot_weights
 
-        compare_q_factors(events_all, q_factors_weights, q_factors_theoretical, title='Standard Q-Factors Comparison', q_factor_type='standard')
-        compare_q_factors(events_all, q_factors_t_weights, q_factors_theoretical, title='Q-Factors with t Comparison', q_factor_type='with_t')
-        compare_q_factors(events_all, q_factors_g_weights, q_factors_theoretical, title='Q-Factors with g Comparison', q_factor_type='with_g')
-        compare_q_factors(events_all, q_factors_t_g_weights, q_factors_theoretical, title='Q-Factors with t and g Comparison', q_factor_type='with_t_and_g')
-        compare_q_factors(events_all, sq_factors_weights, q_factors_theoretical, title='sQ-Factors Comparison', q_factor_type='sq_factors')
-
+        compare_q_factors(
+            q_factors_weights,
+            q_factors_theoretical,
+            title='Standard Q-Factors Comparison',
+            q_factor_type='standard',
+        )
+        compare_q_factors(
+            q_factors_t_weights,
+            q_factors_theoretical,
+            title='Q-Factors with t Comparison',
+            q_factor_type='with_t',
+        )
+        compare_q_factors(
+            q_factors_g_weights,
+            q_factors_theoretical,
+            title='Q-Factors with g Comparison',
+            q_factor_type='with_g',
+        )
+        compare_q_factors(
+            q_factors_t_g_weights,
+            q_factors_theoretical,
+            title='Q-Factors with t and g Comparison',
+            q_factor_type='with_t_and_g',
+        )
+        compare_q_factors(
+            sq_factors_weights,
+            q_factors_theoretical,
+            title='sQ-Factors Comparison',
+            q_factor_type='sq_factors',
+        )
 
     console.print(t)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
