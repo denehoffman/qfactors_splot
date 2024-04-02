@@ -13,7 +13,6 @@ Options:
     --knn=<knn>             Number of nearest neighbors for kNN calculations. [default: 100]
     --density-knn           Compute kNN calculations based off on local density for each event
     --radius-knn=<radius>   Use radius-based neighbors calculations with specified radius. [default: None]
-    --calc-gen              Compare and plot theoretical and calcuated q-values with one another
 """
 
 # Import necessary libraries
@@ -941,7 +940,6 @@ def main():
     num_knn = int(args['--knn'])
     use_density_knn = args['--density-knn']
     use_radius_knn = args['--radius-knn']
-    comp_calc_gen = args['--calc-gen']
 
     if use_radius_knn != 'None':
         try:
@@ -1035,7 +1033,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
                 prefix=r'{{\color{{{color}}}$',
                 suffix=r'$}',
                 good='black',
-                bad='black',
+                bad='red',
                 worst='red',
             )
             p1n1_fit = colorize_by_number(
@@ -1046,7 +1044,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
                 prefix=r'{{\color{{{color}}}$',
                 suffix=r'$}',
                 good='black',
-                bad='black',
+                bad='red',
                 worst='red',
             )
             p10_fit = colorize_by_number(
@@ -1057,7 +1055,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
                 prefix=r'{{\color{{{color}}}$',
                 suffix=r'$}',
                 good='black',
-                bad='black',
+                bad='red',
                 worst='red',
             )
             t_fit = colorize_by_number(
@@ -1068,7 +1066,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
                 prefix=r'{{\color{{{color}}}$',
                 suffix=r'$}',
                 good='black',
-                bad='black',
+                bad='red',
                 worst='red',
             )
             g_fit = colorize_by_number(
@@ -1079,7 +1077,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
                 prefix=r'{{\color{{{color}}}$',
                 suffix=r'$}',
                 good='black',
-                bad='black',
+                bad='red',
                 worst='red',
             )
             return [p00_fit, p1n1_fit, p10_fit, t_fit, g_fit]
@@ -1290,41 +1288,40 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         selected_event_index = 0  # Index of the event you want to inspect
         plot_radius_knn_visualization(events_all, selected_event_index, use_radius_knn)
 
-    if comp_calc_gen:
-        # Theoretical model remains constant across variants
-        q_factors_theoretical = calculate_theoretical_q_factors(events_all, b_true)
-        # q_factors_theoretical = inplot_weights
+    # Theoretical model remains constant across variants
+    q_factors_theoretical = calculate_theoretical_q_factors(events_all, b_true)
+    # q_factors_theoretical = inplot_weights
 
-        compare_q_factors(
-            q_factors_weights,
-            q_factors_theoretical,
-            title='Standard Q-Factors Comparison',
-            q_factor_type='standard',
-        )
-        compare_q_factors(
-            q_factors_t_weights,
-            q_factors_theoretical,
-            title='Q-Factors with t Comparison',
-            q_factor_type='with_t',
-        )
-        compare_q_factors(
-            q_factors_g_weights,
-            q_factors_theoretical,
-            title='Q-Factors with g Comparison',
-            q_factor_type='with_g',
-        )
-        compare_q_factors(
-            q_factors_t_g_weights,
-            q_factors_theoretical,
-            title='Q-Factors with t and g Comparison',
-            q_factor_type='with_t_and_g',
-        )
-        compare_q_factors(
-            sq_factors_weights,
-            q_factors_theoretical,
-            title='sQ-Factors Comparison',
-            q_factor_type='sq_factors',
-        )
+    compare_q_factors(
+        q_factors_weights,
+        q_factors_theoretical,
+        title='Standard Q-Factors Comparison',
+        q_factor_type='standard',
+    )
+    compare_q_factors(
+        q_factors_t_weights,
+        q_factors_theoretical,
+        title='Q-Factors with t Comparison',
+        q_factor_type='with_t',
+    )
+    compare_q_factors(
+        q_factors_g_weights,
+        q_factors_theoretical,
+        title='Q-Factors with g Comparison',
+        q_factor_type='with_g',
+    )
+    compare_q_factors(
+        q_factors_t_g_weights,
+        q_factors_theoretical,
+        title='Q-Factors with t and g Comparison',
+        q_factor_type='with_t_and_g',
+    )
+    compare_q_factors(
+        sq_factors_weights,
+        q_factors_theoretical,
+        title='sQ-Factors Comparison',
+        q_factor_type='sq_factors',
+    )
 
     console.print(t)
 
