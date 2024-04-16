@@ -953,6 +953,14 @@ def main():
     use_radius_knn = args['--radius-knn']
     t_dep = args['--t-dep']
 
+    if use_radius_knn != 'None':
+        try:
+            use_radius_knn = float(use_radius_knn)
+        except ValueError:
+            raise ValueError(f'Invalid value for --radius_knn: {use_radius_knn}') from None
+    else:
+        use_radius_knn = None
+
     directory = 'study'
     if use_density_knn:
         directory += '_density'
@@ -962,13 +970,6 @@ def main():
         directory += '_t_dep'
     Path(directory).resolve().mkdir(parents=True, exist_ok=True)
 
-    if use_radius_knn != 'None':
-        try:
-            use_radius_knn = float(use_radius_knn)
-        except ValueError:
-            raise ValueError(f'Invalid value for --radius_knn: {use_radius_knn}')
-    else:
-        use_radius_knn = None
     tag = ''
     if use_density_knn:
         tag = '_density'
