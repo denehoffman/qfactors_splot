@@ -960,6 +960,7 @@ def main():
         directory += '_radius'
     if t_dep:
         directory += '_t_dep'
+    Path(directory).resolve().mkdir(parents=True, exist_ok=True)
 
     if use_radius_knn != 'None':
         try:
