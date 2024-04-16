@@ -629,6 +629,7 @@ def calculate_q_factors(
     use_density_knn=False,
     use_radius_knn=None,
     plot_indices: list[int] | None = None,
+    directory='study',
 ) -> np.ndarray:
     ms = np.array([e.mass for e in events])
 
@@ -982,7 +983,7 @@ def main():
         events_bkg = gen_bkg(n=num_bkg)
 
     with console.status('Plotting events'):
-        plot_all_events(events_sig, events_bkg, filename='all_events.png')
+        plot_all_events(events_sig, events_bkg, filename='all_events.png', directory=directory)
     events_all = events_sig + events_bkg
 
     t = Table(title='Fit Results')
@@ -1177,6 +1178,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         use_density_knn=use_density_knn,
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+        directory=directory,
     )
     plot_events(
         events_bkg,
@@ -1234,6 +1236,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         use_density_knn=use_density_knn,
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+        directory=directory,
     )
     plot_events(
         events_bkg,
@@ -1292,6 +1295,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         use_density_knn=use_density_knn,
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+        directory=directory,
     )
     plot_events(
         events_bkg,
@@ -1358,6 +1362,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         use_density_knn=use_density_knn,
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+        directory=directory,
     )
     plot_events(
         events_bkg,
