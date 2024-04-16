@@ -13,6 +13,7 @@ Options:
     --knn=<knn>             Number of nearest neighbors for kNN calculations. [default: 100]
     --density-knn           Compute kNN calculations based off on local density for each event
     --radius-knn=<radius>   Use radius-based neighbors calculations with specified radius. [default: None]
+    --t-dep                 Use t-dependence in mass variable
 """
 
 # Import necessary libraries
@@ -28,6 +29,7 @@ mpl.rcParams['text.usetex'] = True
 mpl.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 import matplotlib.pyplot as plt
+from pathlib import Path
 import numpy as np
 import scipy.optimize as opt
 from docopt import docopt
@@ -412,7 +414,11 @@ class WeightedUnbinnedNLL:
 
 # Functions to plot event distributions and fits
 def plot_events(
-    events: list[Event], signal_events: list[Event], weights: np.ndarray | None = None, filename='events.png'
+    events: list[Event],
+    signal_events: list[Event],
+    weights: np.ndarray | None = None,
+    filename='events.png',
+    directory='study',
 ):
     ms = [e.mass for e in events]
     costhetas = [e.costheta for e in events]
@@ -452,11 +458,11 @@ def plot_events(
     ax[1, 1].set_ylabel(r'Counts / 0.036')
     ax[1, 1].legend(loc='upper right')
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    plt.savefig(Path(directory).resolve() / filename, dpi=300)
     plt.close()
 
 
-def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='generated_data.png'):
+def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='generated_data.png', directory='study'):
     ms_sig = [e.mass for e in events_sig]
     costhetas_sig = [e.costheta for e in events_sig]
     phis_sig = [e.phi for e in events_sig]
@@ -546,7 +552,7 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[2, 3].legend(loc='upper right')
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    plt.savefig(Path(directory).resolve() / filename, dpi=300)
     plt.close()
 
 
@@ -801,7 +807,7 @@ def fit_g(events: list[Event], weights: np.ndarray | None = None):
     return m
 
 
-def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qfactor_type: str):
+def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qfactor_type: str, directory='study'):
     # Combined model for the fit
     def model(m, z, b):
         return z * m_sig(m) + (1 - z) * m_bkg(m, b)
@@ -831,11 +837,11 @@ def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qf
     plt.ylabel('Density')
     plt.title(f'Fit for Event {event_index} and its Nearest Neighbors')
     plt.legend()
-    plt.savefig(f'qfactors_{qfactor_type}_{event_index}.png', dpi=300)
+    plt.savefig(Path(directory).resolve() / f'qfactors_{qfactor_type}_{event_index}.png', dpi=300)
     plt.close()
 
 
-def plot_radius_knn_visualization(events, selected_event_index, radius_knn):
+def plot_radius_knn_visualization(events, selected_event_index, radius_knn, directory='study'):
     # Extract coordinates of events
     x_coords = [event.costheta for event in events]  # Example, adjust according to your actual spatial representation
     y_coords = [event.phi for event in events]  # Example
@@ -861,7 +867,7 @@ def plot_radius_knn_visualization(events, selected_event_index, radius_knn):
     plt.legend()
     plt.grid(True)
     plt.axis('equal')
-    plt.show()
+    plt.savefig(Path(directory).resolve() / f'radius_vis_{radius_knn}.png', dpi=300)
 
 
 def calculate_theoretical_q_factors(events, b_true):
@@ -888,7 +894,11 @@ def calculate_theoretical_q_factors(events, b_true):
 
 
 def compare_q_factors(
-    q_factors_calculated, q_factors_theoretical, title='Q-Factors Comparison', q_factor_type='standard'
+    q_factors_calculated,
+    q_factors_theoretical,
+    title='Q-Factors Comparison',
+    q_factor_type='standard',
+    directory='study',
 ):
     """
     Compare calculated Q-factors to the theoretical Q-factor distribution.
@@ -906,7 +916,7 @@ def compare_q_factors(
     plt.grid(True)
     plt.xlim(0, 1)
     plt.ylim(-1, 2)
-    plt.savefig(f'theory_comparison_{q_factor_type}.png', dpi=300)
+    plt.savefig(Path(directory).resolve() / f'theory_comparison_{q_factor_type}.png', dpi=300)
     plt.close()
 
     q_factors_difference = q_factors_calculated - q_factors_theoretical
@@ -916,7 +926,7 @@ def compare_q_factors(
     plt.xlabel(r'$Q_{\text{calc}} - Q_{\text{gen}}$')
     plt.ylabel('Frequency')
     plt.title('Difference Between Calculated and Generated Q-factors')
-    plt.savefig(f'theory_comparison_subtract_{q_factor_type}.png', dpi=300)
+    plt.savefig(Path(directory).resolve() / f'theory_comparison_subtract_{q_factor_type}.png', dpi=300)
     plt.close()
 
     # Quantitative comparison using Kolmogorov-Smirnov test
@@ -940,6 +950,10 @@ def main():
     num_knn = int(args['--knn'])
     use_density_knn = args['--density-knn']
     use_radius_knn = args['--radius-knn']
+
+    directory = 'study'
+    if args['--t-dep']:
+        directory += '_t_dep'
 
     if use_radius_knn != 'None':
         try:
@@ -1101,9 +1115,9 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         g_fit = colorize_by_number(res_g.values['g'], res_g.errors['g'], g_true)
         return [p00_fit, p1n1_fit, p10_fit, t_fit, g_fit]
 
-    plot_events(events_bkg, events_sig, weights=None, filename='bkg_no_weights.png')
-    plot_events(events_sig, events_sig, weights=None, filename='sig_no_weights.png')
-    plot_events(events_all, events_sig, weights=None, filename='all_no_weights.png')
+    plot_events(events_bkg, events_sig, weights=None, filename='bkg_no_weights.png', directory=directory)
+    plot_events(events_sig, events_sig, weights=None, filename='sig_no_weights.png', directory=directory)
+    plot_events(events_all, events_sig, weights=None, filename='all_no_weights.png', directory=directory)
     t.add_row('None', *get_results(events_all, weights=None))
     latex_table += (
         rf"No Weights & {' & '.join(get_results(events_all, weights=None, latex=True))} \\ \cmidrule(lr){{2-6}}" + '\n'
@@ -1112,9 +1126,13 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
     # console.print(latex_table)
 
     sideband_weights = calculate_sideband_weights(events_all)
-    plot_events(events_bkg, events_sig, weights=sideband_weights[num_sig:], filename='bkg_sideband.png')
-    plot_events(events_sig, events_sig, weights=sideband_weights[:num_sig], filename='sig_sideband.png')
-    plot_events(events_all, events_sig, weights=sideband_weights, filename='all_sideband.png')
+    plot_events(
+        events_bkg, events_sig, weights=sideband_weights[num_sig:], filename='bkg_sideband.png', directory=directory
+    )
+    plot_events(
+        events_sig, events_sig, weights=sideband_weights[:num_sig], filename='sig_sideband.png', directory=directory
+    )
+    plot_events(events_all, events_sig, weights=sideband_weights, filename='all_sideband.png', directory=directory)
     t.add_row('Sideband Subtraction', *get_results(events_all, weights=sideband_weights))
     latex_table += (
         rf"Sideband Subtraction & {' & '.join(get_results(events_all, weights=sideband_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
@@ -1124,9 +1142,13 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
     # console.print(latex_table)
 
     inplot_weights = calculate_inplot(events_all)
-    plot_events(events_bkg, events_sig, weights=inplot_weights[num_sig:], filename='bkg_inplot.png')
-    plot_events(events_sig, events_sig, weights=inplot_weights[:num_sig], filename='sig_inplot.png')
-    plot_events(events_all, events_sig, weights=inplot_weights, filename='all_inplot.png')
+    plot_events(
+        events_bkg, events_sig, weights=inplot_weights[num_sig:], filename='bkg_inplot.png', directory=directory
+    )
+    plot_events(
+        events_sig, events_sig, weights=inplot_weights[:num_sig], filename='sig_inplot.png', directory=directory
+    )
+    plot_events(events_all, events_sig, weights=inplot_weights, filename='all_inplot.png', directory=directory)
     t.add_row('inPlot', *get_results(events_all, weights=inplot_weights))
     latex_table += (
         rf"inPlot (Q-factors with $k=N$) & {' & '.join(get_results(events_all, weights=inplot_weights, latex=True))} \\"
@@ -1136,9 +1158,9 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
     # console.print(latex_table)
 
     splot_weights = calculate_splot_weights(events_all)[:, 0]
-    plot_events(events_bkg, events_sig, weights=splot_weights[num_sig:], filename='bkg_splot.png')
-    plot_events(events_sig, events_sig, weights=splot_weights[:num_sig], filename='sig_splot.png')
-    plot_events(events_all, events_sig, weights=splot_weights, filename='all_splot.png')
+    plot_events(events_bkg, events_sig, weights=splot_weights[num_sig:], filename='bkg_splot.png', directory=directory)
+    plot_events(events_sig, events_sig, weights=splot_weights[:num_sig], filename='sig_splot.png', directory=directory)
+    plot_events(events_all, events_sig, weights=splot_weights, filename='all_splot.png', directory=directory)
     t.add_row('sPlot', *get_results(events_all, weights=splot_weights))
     latex_table += (
         rf"sPlot & {' & '.join(get_results(events_all, weights=splot_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
@@ -1156,16 +1178,44 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
     )
-    plot_events(events_bkg, events_sig, weights=q_factors_weights[num_sig:], filename=f'bkg_q_factor{tag}.png')
-    plot_events(events_sig, events_sig, weights=q_factors_weights[:num_sig], filename=f'sig_q_factor{tag}.png')
-    plot_events(events_all, events_sig, weights=q_factors_weights, filename=f'all_q_factor{tag}.png')
+    plot_events(
+        events_bkg,
+        events_sig,
+        weights=q_factors_weights[num_sig:],
+        filename=f'bkg_q_factor{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_sig,
+        events_sig,
+        weights=q_factors_weights[:num_sig],
+        filename=f'sig_q_factor{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_all, events_sig, weights=q_factors_weights, filename=f'all_q_factor{tag}.png', directory=directory
+    )
     t.add_row('Q-Factors', *get_results(events_all, weights=q_factors_weights))
     latex_table += (
         rf"Q-Factors ($k=100$) & {' & '.join(get_results(events_all, weights=q_factors_weights, latex=True))} \\" + '\n'
     )
-    plot_events(events_bkg, events_sig, weights=sq_factors_weights[num_sig:], filename=f'bkg_sq_factor{tag}.png')
-    plot_events(events_sig, events_sig, weights=sq_factors_weights[:num_sig], filename=f'sig_sq_factor{tag}.png')
-    plot_events(events_all, events_sig, weights=sq_factors_weights, filename=f'all_sq_factor{tag}.png')
+    plot_events(
+        events_bkg,
+        events_sig,
+        weights=sq_factors_weights[num_sig:],
+        filename=f'bkg_sq_factor{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_sig,
+        events_sig,
+        weights=sq_factors_weights[:num_sig],
+        filename=f'sig_sq_factor{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_all, events_sig, weights=sq_factors_weights, filename=f'all_sq_factor{tag}.png', directory=directory
+    )
     t.add_row('sQ-Factors', *get_results(events_all, weights=sq_factors_weights))
     latex_table += (
         rf"sQ-Factors ($k=100$) & {' & '.join(get_results(events_all, weights=sq_factors_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
@@ -1185,17 +1235,45 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
     )
-    plot_events(events_bkg, events_sig, weights=q_factors_t_weights[num_sig:], filename=f'bkg_q_factor_t{tag}.png')
-    plot_events(events_sig, events_sig, weights=q_factors_t_weights[:num_sig], filename=f'sig_q_factor_t{tag}.png')
-    plot_events(events_all, events_sig, weights=q_factors_t_weights, filename=f'all_q_factor_t{tag}.png')
+    plot_events(
+        events_bkg,
+        events_sig,
+        weights=q_factors_t_weights[num_sig:],
+        filename=f'bkg_q_factor_t{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_sig,
+        events_sig,
+        weights=q_factors_t_weights[:num_sig],
+        filename=f'sig_q_factor_t{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_all, events_sig, weights=q_factors_t_weights, filename=f'all_q_factor_t{tag}.png', directory=directory
+    )
     t.add_row('Q-Factors (with t)', *get_results(events_all, weights=q_factors_t_weights))
     latex_table += (
         rf"Q-Factors (with t) & {' & '.join(get_results(events_all, weights=q_factors_t_weights, latex=True))} \\"
         + '\n'
     )
-    plot_events(events_bkg, events_sig, weights=sq_factors_t_weights[num_sig:], filename=f'bkg_sq_factor_t{tag}.png')
-    plot_events(events_sig, events_sig, weights=sq_factors_t_weights[:num_sig], filename=f'sig_sq_factor_t{tag}.png')
-    plot_events(events_all, events_sig, weights=sq_factors_t_weights, filename=f'all_sq_factor_t{tag}.png')
+    plot_events(
+        events_bkg,
+        events_sig,
+        weights=sq_factors_t_weights[num_sig:],
+        filename=f'bkg_sq_factor_t{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_sig,
+        events_sig,
+        weights=sq_factors_t_weights[:num_sig],
+        filename=f'sig_sq_factor_t{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_all, events_sig, weights=sq_factors_t_weights, filename=f'all_sq_factor_t{tag}.png', directory=directory
+    )
     t.add_row('sQ-Factors (with t)', *get_results(events_all, weights=sq_factors_t_weights))
     latex_table += (
         rf"sQ-Factors (with t) & {' & '.join(get_results(events_all, weights=sq_factors_t_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
@@ -1215,17 +1293,45 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
     )
-    plot_events(events_bkg, events_sig, weights=q_factors_g_weights[num_sig:], filename=f'bkg_q_factor_g{tag}.png')
-    plot_events(events_sig, events_sig, weights=q_factors_g_weights[:num_sig], filename=f'sig_q_factor_g{tag}.png')
-    plot_events(events_all, events_sig, weights=q_factors_g_weights, filename=f'all_q_factor_g{tag}.png')
+    plot_events(
+        events_bkg,
+        events_sig,
+        weights=q_factors_g_weights[num_sig:],
+        filename=f'bkg_q_factor_g{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_sig,
+        events_sig,
+        weights=q_factors_g_weights[:num_sig],
+        filename=f'sig_q_factor_g{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_all, events_sig, weights=q_factors_g_weights, filename=f'all_q_factor_g{tag}.png', directory=directory
+    )
     t.add_row('Q-Factors (with g)', *get_results(events_all, weights=q_factors_g_weights))
     latex_table += (
         rf"Q-Factors (with g) & {' & '.join(get_results(events_all, weights=q_factors_g_weights, latex=True))} \\"
         + '\n'
     )
-    plot_events(events_bkg, events_sig, weights=sq_factors_g_weights[num_sig:], filename=f'bkg_sq_factor_g{tag}.png')
-    plot_events(events_sig, events_sig, weights=sq_factors_g_weights[:num_sig], filename=f'sig_sq_factor_g{tag}.png')
-    plot_events(events_all, events_sig, weights=sq_factors_g_weights, filename=f'all_sq_factor_g{tag}.png')
+    plot_events(
+        events_bkg,
+        events_sig,
+        weights=sq_factors_g_weights[num_sig:],
+        filename=f'bkg_sq_factor_g{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_sig,
+        events_sig,
+        weights=sq_factors_g_weights[:num_sig],
+        filename=f'sig_sq_factor_g{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_all, events_sig, weights=sq_factors_g_weights, filename=f'all_sq_factor_g{tag}.png', directory=directory
+    )
     t.add_row('sQ-Factors (with g)', *get_results(events_all, weights=sq_factors_g_weights))
     latex_table += (
         rf"sQ-Factors (with g) & {' & '.join(get_results(events_all, weights=sq_factors_g_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
@@ -1253,21 +1359,53 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         use_radius_knn=use_radius_knn,
         plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
     )
-    plot_events(events_bkg, events_sig, weights=q_factors_t_g_weights[num_sig:], filename=f'bkg_q_factor_t_g{tag}.png')
-    plot_events(events_sig, events_sig, weights=q_factors_t_g_weights[:num_sig], filename=f'sig_q_factor_t_g{tag}.png')
-    plot_events(events_all, events_sig, weights=q_factors_t_g_weights, filename=f'all_q_factor_t_g{tag}.png')
+    plot_events(
+        events_bkg,
+        events_sig,
+        weights=q_factors_t_g_weights[num_sig:],
+        filename=f'bkg_q_factor_t_g{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_sig,
+        events_sig,
+        weights=q_factors_t_g_weights[:num_sig],
+        filename=f'sig_q_factor_t_g{tag}.png',
+        directory=directory,
+    )
+    plot_events(
+        events_all,
+        events_sig,
+        weights=q_factors_t_g_weights,
+        filename=f'all_q_factor_t_g{tag}.png',
+        directory=directory,
+    )
     t.add_row('Q-Factors (with t and g)', *get_results(events_all, weights=q_factors_t_g_weights))
     latex_table += (
         rf"Q-Factors (with t and g) & {' & '.join(get_results(events_all, weights=q_factors_t_g_weights, latex=True))} \\"
         + '\n'
     )
     plot_events(
-        events_bkg, events_sig, weights=sq_factors_t_g_weights[num_sig:], filename=f'bkg_sq_factor_t_g{tag}.png'
+        events_bkg,
+        events_sig,
+        weights=sq_factors_t_g_weights[num_sig:],
+        filename=f'bkg_sq_factor_t_g{tag}.png',
+        directory=directory,
     )
     plot_events(
-        events_sig, events_sig, weights=sq_factors_t_g_weights[:num_sig], filename=f'sig_sq_factor_t_g{tag}.png'
+        events_sig,
+        events_sig,
+        weights=sq_factors_t_g_weights[:num_sig],
+        filename=f'sig_sq_factor_t_g{tag}.png',
+        directory=directory,
     )
-    plot_events(events_all, events_sig, weights=sq_factors_t_g_weights, filename=f'all_sq_factor_t_g{tag}.png')
+    plot_events(
+        events_all,
+        events_sig,
+        weights=sq_factors_t_g_weights,
+        filename=f'all_sq_factor_t_g{tag}.png',
+        directory=directory,
+    )
     t.add_row('sQ-Factors (with t and g)', *get_results(events_all, weights=sq_factors_t_g_weights))
     latex_table += (
         rf"sQ-Factors (with t and g) & {' & '.join(get_results(events_all, weights=sq_factors_t_g_weights, latex=True))} \\ \bottomrule"
@@ -1283,10 +1421,11 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
     """
 
     console.print(latex_table)
+    (Path(directory).resolve() / 'latex_table.txt').write_text(latex_table)
 
     if use_radius_knn:
         selected_event_index = 0  # Index of the event you want to inspect
-        plot_radius_knn_visualization(events_all, selected_event_index, use_radius_knn)
+        plot_radius_knn_visualization(events_all, selected_event_index, use_radius_knn, directory=directory)
 
     # Theoretical model remains constant across variants
     q_factors_theoretical = calculate_theoretical_q_factors(events_all, b_true)
@@ -1297,30 +1436,35 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         q_factors_theoretical,
         title='Standard Q-Factors Comparison',
         q_factor_type='standard',
+        directory=directory,
     )
     compare_q_factors(
         q_factors_t_weights,
         q_factors_theoretical,
         title='Q-Factors with t Comparison',
         q_factor_type='with_t',
+        directory=directory,
     )
     compare_q_factors(
         q_factors_g_weights,
         q_factors_theoretical,
         title='Q-Factors with g Comparison',
         q_factor_type='with_g',
+        directory=directory,
     )
     compare_q_factors(
         q_factors_t_g_weights,
         q_factors_theoretical,
         title='Q-Factors with t and g Comparison',
         q_factor_type='with_t_and_g',
+        directory=directory,
     )
     compare_q_factors(
         sq_factors_weights,
         q_factors_theoretical,
         title='sQ-Factors Comparison',
         q_factor_type='sq_factors',
+        directory=directory,
     )
 
     console.print(t)
