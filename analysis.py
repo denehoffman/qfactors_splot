@@ -68,7 +68,7 @@ g_true = 0.13
 g_false = 0.56
 g_min = -1.8
 g_max = 1.8
-voigt_norm = quad(lambda x: voigt_profile((x - m_omega), sigma, m_omega * G_omega / 2), m_min, m_max)
+# voigt_norm = quad(lambda x: voigt_profile((x - m_omega), sigma, m_omega * G_omega / 2), m_min, m_max)
 RED = '#CC3311'
 BLUE = '#0077BB'
 PURPLE = '#AA3377'
@@ -97,7 +97,7 @@ class Event(NamedTuple):
 # Define model functions for signal mass, background mass, signal angular distribution, etc.
 def m_sig(m: float | np.ndarray) -> float | np.ndarray:
     """Signal mass distribution modeled by a normalized Voigtian"""
-    return voigt_profile((m - m_omega), sigma, m_omega * G_omega / 2) / voigt_norm[0]
+    return voigt_profile((m - m_omega), sigma, m_omega * G_omega / 2)
 
 
 m_sig_max = m_sig(m_omega)
