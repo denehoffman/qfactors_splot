@@ -951,9 +951,14 @@ def main():
     num_knn = int(args['--knn'])
     use_density_knn = args['--density-knn']
     use_radius_knn = args['--radius-knn']
+    t_dep = args['--t-dep']
 
     directory = 'study'
-    if args['--t-dep']:
+    if use_density_knn:
+        directory += '_density'
+    if use_radius_knn:
+        directory += '_radius'
+    if t_dep:
         directory += '_t_dep'
 
     if use_radius_knn != 'None':
