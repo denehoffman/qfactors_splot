@@ -53,7 +53,7 @@ class Result:
 
     def to_res(self) -> str:
         return f"=== {self.method} ===\n" + "\n".join(
-            f"{variable} = {value} +/- {error}" for (variable, value, error) in self.contents
+            f"{variable} = {value:.5f} +/- {error:.5f}" for (variable, value, error) in self.contents
         )
 
 
@@ -86,7 +86,7 @@ class Results:
         if output is not None:
             self.out_file = Path(output) if isinstance(output, str) else output
             with self.out_file.open("a") as out_file:
-                out_file.write(result.to_res())
+                out_file.write("\n" + result.to_res())
 
     def __rich_console__(self, _console: Console, _options: ConsoleOptions) -> RenderResult:
         t = Table(title="Fit Results")
