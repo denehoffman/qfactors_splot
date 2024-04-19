@@ -31,6 +31,7 @@ mpl.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 import matplotlib.pyplot as plt
 from pathlib import Path
+import os
 import numpy as np
 import scipy.optimize as opt
 from docopt import docopt
@@ -1118,19 +1119,23 @@ def main():
     analysis_config = {
         "No Weights": {
             "weight_func": None,
-            "description": "No Weights"
+            "description": "No Weights Analysis",
+            "compare_q_factors_required": False
         },
         "Sideband": {
             "weight_func": calculate_sideband_weights,
-            "description": "Sideband Subtraction"
+            "description": "Sideband Subtraction Analysis",
+            "compare_q_factors_required": False
         },
         "InPlot": {
             "weight_func": calculate_inplot,
-            "description": "InPlot Analysis"
+            "description": "InPlot Analysis",
+            "compare_q_factors_required": False
         },
         "sPlot": {
             "weight_func": lambda events: calculate_splot_weights(events)[:, 0],
-            "description": "sPlot Analysis"
+            "description": "sPlot Analysis",
+            "compare_q_factors_required": False
         },
         "Q-Factor": {
             "weight_func": lambda events: calculate_q_factors(
@@ -1142,7 +1147,8 @@ def main():
                                                         use_radius_knn=use_radius_knn,
                                                         directory=directory,
                                                         )[0],
-            "description": "Q-Factor Analysis"
+            "description": "Q-Factor Analysis",
+            "compare_q_factors_required": True 
         },
         "sQ-Factor": {
             "weight_func": lambda events: calculate_q_factors(
@@ -1154,7 +1160,8 @@ def main():
                                                         use_radius_knn=use_radius_knn,
                                                         directory=directory,
                                                         )[1],
-            "description": "sQ-Factor Analysis"
+            "description": "sQ-Factor Analysis",
+            "compare_q_factors_required": True 
         },
         "Q-Factor_t": {
             "weight_func": lambda events: calculate_q_factors(
@@ -1174,7 +1181,8 @@ def main():
                                                         use_radius_knn=use_radius_knn,
                                                         directory=directory,
                                                         )[0],
-            "description": "Q-Factor Analysis (with t)"
+            "description": "Q-Factor Analysis (with t)", 
+            "compare_q_factors_required": True 
         },
         "sQ-Factor_t": {                                                                                   
             "weight_func": lambda events: calculate_q_factors(
@@ -1194,7 +1202,8 @@ def main():
                                                         use_radius_knn=use_radius_knn,
                                                         directory=directory,
                                                         )[1],
-            "description": "sQ-Factor Analysis (with t)"
+            "description": "sQ-Factor Analysis (with t)",
+            "compare_q_factors_required": True
         },
         "Q-Factor_g": {
             "weight_func": lambda events: calculate_q_factors(
@@ -1214,7 +1223,8 @@ def main():
                                                         use_radius_knn=use_radius_knn,
                                                         directory=directory,
                                                         )[0],
-            "description": "Q-Factor Analysis (with g)"
+            "description": "Q-Factor Analysis (with g)",
+            "compare_q_factors_required": True
         },
         "sQ-Factor_g": {                                                                                                                                                                                          
             "weight_func": lambda events: calculate_q_factors(
@@ -1234,7 +1244,8 @@ def main():
                                                         use_radius_knn=use_radius_knn,
                                                         directory=directory,
                                                         )[1],
-            "description": "sQ-Factor Analysis (with g)"
+            "description": "sQ-Factor Analysis (with g)",
+            "compare_q_factors_required": True
         },
         "Q-Factor_t_g": {
             "weight_func": lambda events: calculate_q_factors(
@@ -1255,7 +1266,8 @@ def main():
                                                         use_radius_knn=use_radius_knn,
                                                         directory=directory,
                                                         )[0],
-            "description": "Q-Factor Analysis (with t & g)"
+            "description": "Q-Factor Analysis (with t & g)",
+            "compare_q_factors_required": True
         },
         "sQ-Factor_t_g": {                                                                                   
             "weight_func": lambda events: calculate_q_factors(
@@ -1276,7 +1288,8 @@ def main():
                                                         use_radius_knn=use_radius_knn,
                                                         directory=directory,
                                                         )[1],
-            "description": "sQ-Factor Analysis (with t & g)"
+            "description": "sQ-Factor Analysis (with t & g)",
+            "compare_q_factors_required": True
         }
         
         
@@ -1322,7 +1335,7 @@ def main():
 
         # Inside each iteration, process each analysis type
         for analysis_name, config in analysis_config.items():                                                                                                               
-            print(f"Processing {analysis_name} -- Iteration {iteration}")
+            console.log(f"Processing {analysis_name} for iteration {iteration}...")
             results_filename = f"fit_results_{iteration}.txt"
             filepath = os.path.join(results_dir, results_filename)
            
@@ -1358,10 +1371,13 @@ def main():
                         plot_events(events_all, events_sig, weights=data_weights, filename="all_{analysis_name}_{iteration}.png", directory=directory)
                         # Update LaTeX table
                         t.add_row(description, *get_results(events, weights=data_weights))
-                        #file.write(table_console.export_text())          
+                        if config.get('compare_q_factors_required', True):
+                             # Theoretical model remains constant across variants
+                            q_factors_theoretical = calculate_theoretical_q_factors(events_all, b_true)
+                            compare_q_factors(data_weights, q_factors_theoretical, title=f"{config['description']} Comparison", q_factor_type=analysis_name.lower().replace(" ", "_"), directory=directory,)
                     except Exception as write_error:
-                        print(f"Failed to write results for {data_name} under {analysis_name}: {write_error}")           
-
+                        print(f"Failed to write results for {data_name} under {analysis_name}: {write_error}")    
+            
         table_console.print(t) 
         # After all analysis types are processed, export the table to the text file
         with open(filepath, 'a') as file:
@@ -1372,48 +1388,6 @@ def main():
     if use_radius_knn:
         selected_event_index = 0  # Index of the event you want to inspect
         plot_radius_knn_visualization(events_all, selected_event_index, use_radius_knn, directory=directory)
-
-    # Theoretical model remains constant across variants
-    q_factors_theoretical = calculate_theoretical_q_factors(events_all, b_true)
-    # q_factors_theoretical = inplot_weights
-
-    compare_q_factors(
-        q_factors_weights,
-        q_factors_theoretical,
-        title='Standard Q-Factors Comparison',
-        q_factor_type='standard',
-        directory=directory,
-    )
-    compare_q_factors(
-        q_factors_t_weights,
-        q_factors_theoretical,
-        title='Q-Factors with t Comparison',
-        q_factor_type='with_t',
-        directory=directory,
-    )
-    compare_q_factors(
-        q_factors_g_weights,
-        q_factors_theoretical,
-        title='Q-Factors with g Comparison',
-        q_factor_type='with_g',
-        directory=directory,
-    )
-    compare_q_factors(
-        q_factors_t_g_weights,
-        q_factors_theoretical,
-        title='Q-Factors with t and g Comparison',
-        q_factor_type='with_t_and_g',
-        directory=directory,
-    )
-    compare_q_factors(
-        sq_factors_weights,
-        q_factors_theoretical,
-        title='sQ-Factors Comparison',
-        q_factor_type='sq_factors',
-        directory=directory,
-    )
-
-    console.print(t)
 
 
 if __name__ == '__main__':
