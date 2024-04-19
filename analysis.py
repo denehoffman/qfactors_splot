@@ -466,7 +466,7 @@ def plot_events(
     plt.close()
 
 
-def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='generated_data.png', plot_dir="plots"):
+def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='generated_data.png', directory='study'):
     ms_sig = [e.mass for e in events_sig]
     costhetas_sig = [e.costheta for e in events_sig]
     phis_sig = [e.phi for e in events_sig]
@@ -556,7 +556,7 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[2, 3].legend(loc='upper right')
 
     plt.tight_layout()
-    plt.savefig(os.path.join(plot_dir, filename), dpi=300)
+    plt.savefig(Path(directory).resolve() / filename, dpi=300)
     plt.close()
 
 
@@ -970,8 +970,6 @@ def main():
     t_dep = args['--t-dep']
     num_iterations = int(args['--num-iter'])
 
-
-
     if use_radius_knn != 'None':
         try:
             use_radius_knn = float(use_radius_knn)
@@ -1142,6 +1140,7 @@ def main():
                                                         num_knn=num_knn,
                                                         use_density_knn=use_density_knn,
                                                         use_radius_knn=use_radius_knn,
+                                                        directory=directory,
                                                         )[0],
             "description": "Q-Factor Analysis"
         },
@@ -1153,6 +1152,7 @@ def main():
                                                         num_knn=num_knn,
                                                         use_density_knn=use_density_knn,
                                                         use_radius_knn=use_radius_knn,
+                                                        directory=directory,
                                                         )[1],
             "description": "sQ-Factor Analysis"
         },
@@ -1172,6 +1172,7 @@ def main():
                                                         num_knn=num_knn,
                                                         use_density_knn=use_density_knn,
                                                         use_radius_knn=use_radius_knn,
+                                                        directory=directory,
                                                         )[0],
             "description": "Q-Factor Analysis (with t)"
         },
@@ -1191,6 +1192,7 @@ def main():
                                                         num_knn=num_knn,
                                                         use_density_knn=use_density_knn,
                                                         use_radius_knn=use_radius_knn,
+                                                        directory=directory,
                                                         )[1],
             "description": "sQ-Factor Analysis (with t)"
         },
@@ -1210,6 +1212,7 @@ def main():
                                                         num_knn=num_knn,
                                                         use_density_knn=use_density_knn,
                                                         use_radius_knn=use_radius_knn,
+                                                        directory=directory,
                                                         )[0],
             "description": "Q-Factor Analysis (with g)"
         },
@@ -1229,6 +1232,7 @@ def main():
                                                         num_knn=num_knn,
                                                         use_density_knn=use_density_knn,
                                                         use_radius_knn=use_radius_knn,
+                                                        directory=directory,
                                                         )[1],
             "description": "sQ-Factor Analysis (with g)"
         },
@@ -1249,6 +1253,7 @@ def main():
                                                         num_knn=num_knn,
                                                         use_density_knn=use_density_knn,
                                                         use_radius_knn=use_radius_knn,
+                                                        directory=directory,
                                                         )[0],
             "description": "Q-Factor Analysis (with t & g)"
         },
@@ -1269,6 +1274,7 @@ def main():
                                                         num_knn=num_knn,
                                                         use_density_knn=use_density_knn,
                                                         use_radius_knn=use_radius_knn,
+                                                        directory=directory,
                                                         )[1],
             "description": "sQ-Factor Analysis (with t & g)"
         }
@@ -1280,9 +1286,6 @@ def main():
     results_dir = "results"
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
-    plots_dir = "plots"
-    if not os.path.exists(plots_dir):
-        os.makedirs(plots_dir)
 
     # For labeling the results                                                                                                                                                                       
     keys = ['ρ⁰₀₀', 'ρ⁰₁,₋₁', 'Re[ρ⁰₁₀]', 'τ', 'σ']
@@ -1352,7 +1355,7 @@ def main():
                     try:
                         results = list(zip(keys, get_results(events, data_weights)))
                         write_fit_results(file, results, header=result_header, iteration=iteration)
-                        plot_events(events_all, events_sig, weights=data_weights, filename='all_{analysis_name}_{iteration}.png')
+                        plot_events(events_all, events_sig, weights=data_weights, filename="all_{analysis_name}_{iteration}.png", directory=directory)
                         # Update LaTeX table
                         t.add_row(description, *get_results(events, weights=data_weights))
                         #file.write(table_console.export_text())          
