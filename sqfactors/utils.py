@@ -22,38 +22,43 @@ class Result:
         fit: float,
         error: float,
         true: float,
-    ) -> Literal["good", "bad", "worst"]:
+    ) -> Literal['good', 'bad', 'worst']:
         if abs(fit - true) > error * 5:
-            return "worst"
+            return 'worst'
         if abs(fit - true) > error * 3:
-            return "bad"
-        return "good"
+            return 'bad'
+        return 'good'
 
     def to_latex(self) -> str:
-        colors = {"good": "black", "bad": "red", "worst": "red"}
+        colors = {'good': 'black', 'bad': 'red', 'worst': 'red'}
         out = self.method
         for variable, value, error in self.contents:
             truth = truths[variable]
             dev = Result.get_deviation(value, error, truth)
-            out += rf" & {{\color{{{colors[dev]}}}{value}\pm{error}}}"
-        out += "//"
+            out += rf' & {{\color{{{colors[dev]}}}{value}\pm{error}}}'
+        out += '//'
         return out
 
     def to_rich(self) -> list[str]:
-        colors = {"good": "black", "bad": "yellow", "worst": "red"}
+        colors = {'good': 'black', 'bad': 'yellow', 'worst': 'red'}
         out = [self.method]
         for variable, value, error in self.contents:
             truth = truths[variable]
             dev = Result.get_deviation(value, error, truth)
-            out += f"[{colors[dev]}]{value}±{error}[/]"
+            out += f'[{colors[dev]}]{value}±{error}[/]'
         return out
 
     def to_tsv(self) -> str:
-        return self.method + "\t" + "\t".join(f"{value:.3f}\t{error:.3f}" for (_, value, error) in self.contents)
+        return (
+            self.method
+            + '\t'
+            + '\t'.join(f'{value:.3f}\t{error:.3f}' for (_, value, error) in self.contents)
+        )
 
     def to_res(self) -> str:
-        return f"=== {self.method} ===\n" + "\n".join(
-            f"{variable} = {value:.5f} +/- {error:.5f}" for (variable, value, error) in self.contents
+        return f'=== {self.method} ===\n' + '\n'.join(
+            f'{variable} = {value:.5f} +/- {error:.5f}'
+            for (variable, value, error) in self.contents
         )
 
 
@@ -65,16 +70,16 @@ class Results:
     def load_from_res_file(res_path: Path | str) -> Results:
         res_path = Path(res_path) if isinstance(res_path, str) else res_path
         res_text = res_path.read_text()
-        header_pattern = re.compile(r"===(.*?)===\s")
+        header_pattern = re.compile(r'===(.*?)===\s')
         headers = re.findall(header_pattern, res_text)
         contents = re.split(header_pattern, res_text)
         results = []
         for header, content in zip(headers, contents):
             fit_values = [
                 (
-                    row.split(" = ")[0],
-                    float(row.split(" = ")[1].split(" +/- ")[0]),
-                    float(row.split(" = ")[1].split(" +/- ")[1]),
+                    row.split(' = ')[0],
+                    float(row.split(' = ')[1].split(' +/- ')[0]),
+                    float(row.split(' = ')[1].split(' +/- ')[1]),
                 )
                 for row in content.splitlines()
             ]
@@ -85,19 +90,19 @@ class Results:
         self.results.append(result)
         if output is not None:
             self.out_file = Path(output) if isinstance(output, str) else output
-            with self.out_file.open("a") as out_file:
-                out_file.write("\n" + result.to_res())
+            with self.out_file.open('a') as out_file:
+                out_file.write('\n' + result.to_res())
 
     def __rich_console__(self, _console: Console, _options: ConsoleOptions) -> RenderResult:
-        t = Table(title="Fit Results")
-        t.add_column("Weighting Method")
-        t.add_column("ρ⁰₀₀")
-        t.add_column("ρ⁰₁,₋₁")
-        t.add_column("Re[ρ⁰₁₀]")
-        t.add_column("τ")
-        t.add_column("σ")  # noqa: RUF001
+        t = Table(title='Fit Results')
+        t.add_column('Weighting Method')
+        t.add_column('ρ⁰₀₀')
+        t.add_column('ρ⁰₁,₋₁')
+        t.add_column('Re[ρ⁰₁₀]')
+        t.add_column('τ')
+        t.add_column('σ')  # noqa: RUF001
         t.add_row(
-            "Truth",
+            'Truth',
             f"{truths["p00"]:.3f}",
             f"{truths["p1n1"]:.3f}",
             f"{truths["p10"]:.3f}",
@@ -117,7 +122,7 @@ class Results:
 Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & $\tau$ & $\sigma$ \\ \midrule
 \textbf{{Truth}} & \textbf{{{truths["p00"]:.3f}}} & \textbf{{{truths["p1n1"]:.3f}}} & \textbf{{{truths["p10"]:.3f}}} & \textbf{{{truths["tau_sig"]:.3f}}} & \textbf{{{truths["sigma_sig"]:.3f}}} \\ \midrule
             """
-        out += "\n".join(result.to_latex() for result in self.results)
+        out += '\n'.join(result.to_latex() for result in self.results)
         out += r"""
 \bottomrule
 \end{tabular}
@@ -129,5 +134,5 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
 
     def as_tsv(self) -> str:
         out = f"Method\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\nTruth\t{truths["p00"]:.3f}\t\t{truths["p1n1"]:.3f}\t\t{truths["p10"]:.3f}\t\t{truths["tau_sig"]:.3f}\t\t{truths["sigma_sig"]:.3f}\t\n"
-        out += "\n".join(result.to_tsv() for result in self.results)
+        out += '\n'.join(result.to_tsv() for result in self.results)
         return out

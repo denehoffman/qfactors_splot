@@ -3,7 +3,7 @@
 Analyzes particle decay events by generating signal and background data, computing factors such as Q-factors and sPlot weights, and visualizing the data through plots and fits. The available options enable customization of the dataset size, plot types, and factor calculations.
 
 Usage:
-    analysis.py [options]
+    analysis [options]
 
 Options:
     -h --help               Show this screen.
@@ -43,275 +43,287 @@ from sqfactors.event import (
 )
 from sqfactors.utils import Results
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     args = docopt(__doc__)
 
-    num_sig = int(args["--num-sig"])
-    num_bkg = int(args["--num-bkg"])
-    num_knn = int(args["--knn"])
-    use_density_knn = args["--density-knn"]
-    use_radius_knn = args["--radius-knn"]
-    t_dep = args["--t-dep"]
-    num_iterations = int(args["--num-iter"])
+    num_sig = int(args['--num-sig'])
+    num_bkg = int(args['--num-bkg'])
+    num_knn = int(args['--knn'])
+    use_density_knn = args['--density-knn']
+    use_radius_knn = args['--radius-knn']
+    t_dep = args['--t-dep']
+    num_iterations = int(args['--num-iter'])
 
-    if use_radius_knn != "None":
+    if use_radius_knn != 'None':
         try:
             use_radius_knn = float(use_radius_knn)
         except ValueError:
-            msg = f"Invalid value for --radius_knn: {use_radius_knn}"
+            msg = f'Invalid value for --radius_knn: {use_radius_knn}'
             raise ValueError(msg) from None
     else:
         use_radius_knn = None
 
-    directory = "study"
+    directory = 'study'
     if use_density_knn:
-        directory += "_density"
+        directory += '_density'
     if use_radius_knn:
-        directory += "_radius"
+        directory += '_radius'
     if t_dep:
-        directory += "_t_dep"
+        directory += '_t_dep'
     Path(directory).resolve().mkdir(parents=True, exist_ok=True)
 
-    parallel = args["--parallel"]
+    parallel = args['--parallel']
 
     if parallel:
         # Generate events in parallel.
-        console.print("Generating signal and background events in parallel ...")
+        console.print('Generating signal and background events in parallel ...')
         events_sig = parallel_event_generation(gen_event_partial, n=num_sig, num_workers=4)
         events_bkg = parallel_event_generation(gen_bkg_event_partial, n=num_bkg, num_workers=4)
     else:
         # Default to sequential generation.
-        console.print("Generating signal and background events sequentially ...")
+        console.print('Generating signal and background events sequentially ...')
         events_sig = gen_sig(n=num_sig)
         events_bkg = gen_bkg(n=num_bkg)
 
-    with console.status("Plotting events"):
-        plot.plot_all_events(events_sig, events_bkg, filename="all_events.png", directory=directory)
+    with console.status('Plotting events'):
+        plot.plot_all_events(events_sig, events_bkg, filename='all_events.png', directory=directory)
     events_all = events_sig + events_bkg
 
     # Define weights functions and descriptions for various analyses
     analysis_config = {
-        "No Weights": {"weight_func": None, "description": "No Weights Analysis", "compare_q_factors_required": False},
-        "Sideband": {
-            "weight_func": calculate_sideband_weights,
-            "description": "Sideband Subtraction Analysis",
-            "compare_q_factors_required": False,
+        'No Weights': {
+            'weight_func': None,
+            'description': 'No Weights Analysis',
+            'compare_q_factors_required': False,
         },
-        "InPlot": {
-            "weight_func": calculate_inplot,
-            "description": "InPlot Analysis",
-            "compare_q_factors_required": False,
+        'Sideband': {
+            'weight_func': calculate_sideband_weights,
+            'description': 'Sideband Subtraction Analysis',
+            'compare_q_factors_required': False,
         },
-        "sPlot": {
-            "weight_func": lambda events: calculate_splot_weights(events)[:, 0],
-            "description": "sPlot Analysis",
-            "compare_q_factors_required": False,
+        'InPlot': {
+            'weight_func': calculate_inplot,
+            'description': 'InPlot Analysis',
+            'compare_q_factors_required': False,
         },
-        "Q-Factor": {
-            "weight_func": lambda events: calculate_q_factors(
+        'sPlot': {
+            'weight_func': lambda events: calculate_splot_weights(events)[:, 0],
+            'description': 'sPlot Analysis',
+            'compare_q_factors_required': False,
+        },
+        'Q-Factor': {
+            'weight_func': lambda events: calculate_q_factors(
                 events,
-                phase_space=np.array([[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]),
-                name="angles",
+                phase_space=np.array(
+                    [[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]
+                ),
+                name='angles',
                 num_knn=num_knn,
                 use_density_knn=use_density_knn,
                 use_radius_knn=use_radius_knn,
                 directory=directory,
             )[0],
-            "description": "Q-Factor Analysis",
-            "compare_q_factors_required": True,
+            'description': 'Q-Factor Analysis',
+            'compare_q_factors_required': True,
         },
-        "sQ-Factor": {
-            "weight_func": lambda events: calculate_q_factors(
+        'sQ-Factor': {
+            'weight_func': lambda events: calculate_q_factors(
                 events,
-                phase_space=np.array([[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]),
-                name="angles",
+                phase_space=np.array(
+                    [[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]
+                ),
+                name='angles',
                 num_knn=num_knn,
                 use_density_knn=use_density_knn,
                 use_radius_knn=use_radius_knn,
                 directory=directory,
             )[1],
-            "description": "sQ-Factor Analysis",
-            "compare_q_factors_required": True,
+            'description': 'sQ-Factor Analysis',
+            'compare_q_factors_required': True,
         },
-        "Q-Factor_t": {
-            "weight_func": lambda events: calculate_q_factors(
+        'Q-Factor_t': {
+            'weight_func': lambda events: calculate_q_factors(
                 events,
                 phase_space=np.array(
                     [
                         [
                             e.costheta / (2 / 3),
                             e.phi / (2 * np.pi**3 / 3),
-                            e.t / ((bounds["t_max"] ** 3 - bounds["t_min"] ** 3) / 3),
+                            e.t / ((bounds['t_max'] ** 3 - bounds['t_min'] ** 3) / 3),
                         ]
                         for e in events
                     ]
                 ),
-                name="angles_t",
+                name='angles_t',
                 num_knn=num_knn,
                 use_density_knn=use_density_knn,
                 use_radius_knn=use_radius_knn,
                 directory=directory,
             )[0],
-            "description": "Q-Factor Analysis (with t)",
-            "compare_q_factors_required": True,
+            'description': 'Q-Factor Analysis (with t)',
+            'compare_q_factors_required': True,
         },
-        "sQ-Factor_t": {
-            "weight_func": lambda events: calculate_q_factors(
+        'sQ-Factor_t': {
+            'weight_func': lambda events: calculate_q_factors(
                 events,
                 phase_space=np.array(
                     [
                         [
                             e.costheta / (2 / 3),
                             e.phi / (2 * np.pi**3 / 3),
-                            e.t / ((bounds["t_max"] ** 3 - bounds["t_min"] ** 3) / 3),
+                            e.t / ((bounds['t_max'] ** 3 - bounds['t_min'] ** 3) / 3),
                         ]
                         for e in events
                     ]
                 ),
-                name="angles_t",
+                name='angles_t',
                 num_knn=num_knn,
                 use_density_knn=use_density_knn,
                 use_radius_knn=use_radius_knn,
                 directory=directory,
             )[1],
-            "description": "sQ-Factor Analysis (with t)",
-            "compare_q_factors_required": True,
+            'description': 'sQ-Factor Analysis (with t)',
+            'compare_q_factors_required': True,
         },
-        "Q-Factor_g": {
-            "weight_func": lambda events: calculate_q_factors(
+        'Q-Factor_g': {
+            'weight_func': lambda events: calculate_q_factors(
                 events,
                 phase_space=np.array(
                     [
                         [
                             e.costheta / (2 / 3),
                             e.phi / (2 * np.pi**3 / 3),
-                            e.g / ((bounds["g_max"] ** 3 - bounds["g_min"] ** 3) / 3),
+                            e.g / ((bounds['g_max'] ** 3 - bounds['g_min'] ** 3) / 3),
                         ]
                         for e in events
                     ]
                 ),
-                name="angles_g",
+                name='angles_g',
                 num_knn=num_knn,
                 use_density_knn=use_density_knn,
                 use_radius_knn=use_radius_knn,
                 directory=directory,
             )[0],
-            "description": "Q-Factor Analysis (with g)",
-            "compare_q_factors_required": True,
+            'description': 'Q-Factor Analysis (with g)',
+            'compare_q_factors_required': True,
         },
-        "sQ-Factor_g": {
-            "weight_func": lambda events: calculate_q_factors(
+        'sQ-Factor_g': {
+            'weight_func': lambda events: calculate_q_factors(
                 events,
                 phase_space=np.array(
                     [
                         [
                             e.costheta / (2 / 3),
                             e.phi / (2 * np.pi**3 / 3),
-                            e.g / ((bounds["g_max"] ** 3 - bounds["g_min"] ** 3) / 3),
+                            e.g / ((bounds['g_max'] ** 3 - bounds['g_min'] ** 3) / 3),
                         ]
                         for e in events
                     ]
                 ),
-                name="angles_g",
+                name='angles_g',
                 num_knn=num_knn,
                 use_density_knn=use_density_knn,
                 use_radius_knn=use_radius_knn,
                 directory=directory,
             )[1],
-            "description": "sQ-Factor Analysis (with g)",
-            "compare_q_factors_required": True,
+            'description': 'sQ-Factor Analysis (with g)',
+            'compare_q_factors_required': True,
         },
-        "Q-Factor_t_g": {
-            "weight_func": lambda events: calculate_q_factors(
+        'Q-Factor_t_g': {
+            'weight_func': lambda events: calculate_q_factors(
                 events,
                 phase_space=np.array(
                     [
                         [
                             e.costheta / (2 / 3),
                             e.phi / (2 * np.pi**3 / 3),
-                            e.t / ((bounds["t_max"] ** 3 - bounds["t_min"] ** 3) / 3),
-                            e.g / ((bounds["g_max"] ** 3 - bounds["g_min"] ** 3) / 3),
+                            e.t / ((bounds['t_max'] ** 3 - bounds['t_min'] ** 3) / 3),
+                            e.g / ((bounds['g_max'] ** 3 - bounds['g_min'] ** 3) / 3),
                         ]
                         for e in events_all
                     ]
                 ),
-                name="angles_t_g",
+                name='angles_t_g',
                 num_knn=num_knn,
                 use_density_knn=use_density_knn,
                 use_radius_knn=use_radius_knn,
                 directory=directory,
             )[0],
-            "description": "Q-Factor Analysis (with t & g)",
-            "compare_q_factors_required": True,
+            'description': 'Q-Factor Analysis (with t & g)',
+            'compare_q_factors_required': True,
         },
-        "sQ-Factor_t_g": {
-            "weight_func": lambda events: calculate_q_factors(
+        'sQ-Factor_t_g': {
+            'weight_func': lambda events: calculate_q_factors(
                 events,
                 phase_space=np.array(
                     [
                         [
                             e.costheta / (2 / 3),
                             e.phi / (2 * np.pi**3 / 3),
-                            e.t / ((bounds["t_max"] ** 3 - bounds["t_min"] ** 3) / 3),
-                            e.g / ((bounds["g_max"] ** 3 - bounds["g_min"] ** 3) / 3),
+                            e.t / ((bounds['t_max'] ** 3 - bounds['t_min'] ** 3) / 3),
+                            e.g / ((bounds['g_max'] ** 3 - bounds['g_min'] ** 3) / 3),
                         ]
                         for e in events_all
                     ]
                 ),
-                name="angles_t_g",
+                name='angles_t_g',
                 num_knn=num_knn,
                 use_density_knn=use_density_knn,
                 use_radius_knn=use_radius_knn,
                 directory=directory,
             )[1],
-            "description": "sQ-Factor Analysis (with t & g)",
-            "compare_q_factors_required": True,
+            'description': 'sQ-Factor Analysis (with t & g)',
+            'compare_q_factors_required': True,
         },
     }
 
     # Directory for storing results
-    results_dir = Path("results")
+    results_dir = Path('results')
     results_dir.mkdir(exist_ok=True)
 
     # Handle each iteration
     for iteration in range(num_iterations):
-        console.print(f"Starting Iteration {iteration}", style="bold yellow")
+        console.print(f'Starting Iteration {iteration}', style='bold yellow')
         results = Results()
 
         # Inside each iteration, process each analysis type
         for analysis_name, config in analysis_config.items():
-            console.log(f"Processing {analysis_name} for iteration {iteration}...")
-            results_filename = f"fit_results_{iteration}.txt"
+            console.log(f'Processing {analysis_name} for iteration {iteration}...')
+            results_filename = f'fit_results_{iteration}.txt'
             filepath = results_dir / results_filename
 
             # Calculate weights for this analysis type
             weights = np.ones(len(events_all))
-            if config["weight_func"] is not None:
-                weights = config["weight_func"](events_all)
+            if config['weight_func'] is not None:
+                weights = config['weight_func'](events_all)
 
-            console.print(f"Weights for {analysis_name}: {np.array(weights).shape}, First few values: {weights[:5]}\n")
+            console.print(
+                f'Weights for {analysis_name}: {np.array(weights).shape}, First few values: {weights[:5]}\n'
+            )
 
             # Save row to outputs
-            results.write_row(get_results(config["description"], events_all, weights), filepath)
+            results.write_row(get_results(config['description'], events_all, weights), filepath)
             plot.plot_events(
                 events_all,
                 events_sig,
                 weights=weights,
-                filename=f"events_{analysis_name}_{iteration}.png",
+                filename=f'events_{analysis_name}_{iteration}.png',
                 directory=directory,
             )
-            if config.get("compare_q_factors_required", True):
+            if config.get('compare_q_factors_required', True):
                 # Theoretical model remains constant across variants
-                q_factors_theoretical = calculate_theoretical_q_factors(events_all, truths["b"])
+                q_factors_theoretical = calculate_theoretical_q_factors(events_all, truths['b'])
                 plot.compare_q_factors(
                     weights,
                     q_factors_theoretical,
                     title=f"{config['description']} Comparison",
-                    q_factor_type=analysis_name.lower().replace(" ", "_"),
+                    q_factor_type=analysis_name.lower().replace(' ', '_'),
                     directory=directory,
                 )
         console.print(results)
 
     if use_radius_knn:
         selected_event_index = 0  # Index of the event you want to inspect
-        plot.plot_radius_knn_visualization(events_all, selected_event_index, use_radius_knn, directory=directory)
+        plot.plot_radius_knn_visualization(
+            events_all, selected_event_index, use_radius_knn, directory=directory
+        )

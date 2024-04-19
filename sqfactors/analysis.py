@@ -24,18 +24,20 @@ from sqfactors.utils import Result
 
 # Calculate K-nearest neighbors for a given set of points
 def k_nearest_neighbors(x, k):
-    neighbors = NearestNeighbors(n_neighbors=k + 1, algorithm="ball_tree").fit(x)
+    neighbors = NearestNeighbors(n_neighbors=k + 1, algorithm='ball_tree').fit(x)
     _, indices = neighbors.kneighbors(x)
     return indices  # includes the point itself + k nearest neighbors
 
 
-def calculate_local_density_knn(events, phase_space, metric="euclidean"):
+def calculate_local_density_knn(events, phase_space, metric='euclidean'):
     """
     Calculate the KNN based on local density for each event.
     The function returns indices of events in the neighborhood for each event.
     """
     # Calculate pairwise distances
-    nbrs = NearestNeighbors(n_neighbors=len(events), algorithm="auto", metric=metric).fit(phase_space)
+    nbrs = NearestNeighbors(n_neighbors=len(events), algorithm='auto', metric=metric).fit(
+        phase_space
+    )
     distances, indices = nbrs.kneighbors(phase_space)
 
     # Estimate local density
@@ -46,18 +48,20 @@ def calculate_local_density_knn(events, phase_space, metric="euclidean"):
     sorted_density_indices = np.argsort(densities)[::-1]
 
     # Compute variable K based on density ranking
-    variable_k = np.linspace(50, 200, len(events)).astype(int)  # Linearly increasing K from 10 to 100
+    variable_k = np.linspace(50, 200, len(events)).astype(
+        int
+    )  # Linearly increasing K from 10 to 100
     sorted_k = variable_k[np.argsort(sorted_density_indices)]  # Assign K based on density ranking
 
     # Calculate variable KNN
     return [indices[i, :k] for i, k in enumerate(sorted_k)]
 
 
-def calculate_radius_neighbors(_events, phase_space, radius, metric="euclidean"):
+def calculate_radius_neighbors(_events, phase_space, radius, metric='euclidean'):
     """
     Calculate neighbors within a specified radius for each event.
     """
-    nbrs = NearestNeighbors(radius=radius, algorithm="auto", metric=metric).fit(phase_space)
+    nbrs = NearestNeighbors(radius=radius, algorithm='auto', metric=metric).fit(phase_space)
     _distances, indices = nbrs.radius_neighbors(phase_space)
 
     # Convert sparse matrix to list of lists for indices
@@ -97,32 +101,32 @@ class WeightedUnbinnedNLL:
 
 def calculate_sideband_weights(events: list[Event]) -> np.ndarray:
     ms = np.array([e.mass for e in events])
-    left_cut = truths["m_omega"] - 3 * truths["G_omega"]
-    right_cut = truths["m_omega"] + 3 * truths["G_omega"]
+    left_cut = truths['m_omega'] - 3 * truths['G_omega']
+    right_cut = truths['m_omega'] + 3 * truths['G_omega']
 
     def model(x: np.ndarray, z, b, *args) -> np.ndarray:  # noqa: ARG001
         return z * m_sig(x) + (1 - z) * m_bkg(x, b)
 
     c = cost.UnbinnedNLL(ms, model)
     # 100% signal starting condition
-    m_1 = Minuit(c, z=1.0, b=truths["b"])
-    m_1.limits["z"] = (0, 1)
+    m_1 = Minuit(c, z=1.0, b=truths['b'])
+    m_1.limits['z'] = (0, 1)
     m_1.migrad()
     # 100% background starting condition
-    m_2 = Minuit(c, z=0.0, b=truths["b"])
-    m_2.limits["z"] = (0, 1)
+    m_2 = Minuit(c, z=0.0, b=truths['b'])
+    m_2.limits['z'] = (0, 1)
     m_2.migrad()
     # 50% signal / 50% background starting condition
-    m_3 = Minuit(c, z=0.5, b=truths["b"])
-    m_3.limits["z"] = (0, 1)
+    m_3 = Minuit(c, z=0.5, b=truths['b'])
+    m_3.limits['z'] = (0, 1)
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
     best_fit = fits[np.argmin(nlls)]
 
-    left_area = quad(lambda x: m_bkg(x, best_fit.values[1]), bounds["m_min"], left_cut)[0]  # noqa: PD011
+    left_area = quad(lambda x: m_bkg(x, best_fit.values[1]), bounds['m_min'], left_cut)[0]  # noqa: PD011
     center_area = quad(lambda x: m_bkg(x, best_fit.values[1]), left_cut, right_cut)[0]  # noqa: PD011
-    right_area = quad(lambda x: m_bkg(x, best_fit.values[1]), right_cut, bounds["m_max"])[0]  # noqa: PD011
+    right_area = quad(lambda x: m_bkg(x, best_fit.values[1]), right_cut, bounds['m_max'])[0]  # noqa: PD011
 
     weights = np.ones_like(ms)
     mask_sidebands = (ms < left_cut) | (ms > right_cut)
@@ -142,16 +146,16 @@ def calculate_inplot(events: list[Event]) -> np.ndarray:
     inplot_weights = []
     c = cost.UnbinnedNLL(ms, model)
     # 100% signal starting condition
-    m_1 = Minuit(c, z=1.0, b=truths["b"])
-    m_1.limits["z"] = (0, 1)
+    m_1 = Minuit(c, z=1.0, b=truths['b'])
+    m_1.limits['z'] = (0, 1)
     m_1.migrad()
     # 100% background starting condition
-    m_2 = Minuit(c, z=0.0, b=truths["b"])
-    m_2.limits["z"] = (0, 1)
+    m_2 = Minuit(c, z=0.0, b=truths['b'])
+    m_2.limits['z'] = (0, 1)
     m_2.migrad()
     # 50% signal / 50% background starting condition
-    m_3 = Minuit(c, z=0.5, b=truths["b"])
-    m_3.limits["z"] = (0, 1)
+    m_3 = Minuit(c, z=0.5, b=truths['b'])
+    m_3.limits['z'] = (0, 1)
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -168,26 +172,26 @@ def calculate_q_factors(
     use_density_knn=False,
     use_radius_knn=None,
     plot_indices: list[int] | None = None,
-    directory="study",
+    directory='study',
 ) -> tuple[np.ndarray, np.ndarray]:
     ms = np.array([e.mass for e in events])
 
     knn_indices = []
 
     if use_density_knn:
-        tag = "_density"
+        tag = '_density'
         # Calculate KNN based on local density
-        with console.status("Calculating K-Nearest Neighbors Based on Local Density"):
+        with console.status('Calculating K-Nearest Neighbors Based on Local Density'):
             knn_indices = calculate_local_density_knn(events, phase_space)
     elif use_radius_knn:
-        tag = "_radius"
+        tag = '_radius'
         radius = float(use_radius_knn)
-        with console.status("Calculating Radius Neighbors"):
+        with console.status('Calculating Radius Neighbors'):
             knn_indices = calculate_radius_neighbors(events, phase_space, radius)
     else:
-        tag = ""
+        tag = ''
         # Standard KNN calculation
-        with console.status("Calculating K-Nearest Neighbors"):
+        with console.status('Calculating K-Nearest Neighbors'):
             indices = k_nearest_neighbors(phase_space, num_knn)
             # Exclude the first index for each event since it is the event itself
             knn_indices = [index_set[1:] for index_set in indices]
@@ -200,20 +204,20 @@ def calculate_q_factors(
 
     q_factors = []
     sq_factors = []
-    for i in track(range(len(events)), description="Calculating Q-Factors"):
+    for i in track(range(len(events)), description='Calculating Q-Factors'):
         indices = knn_indices[i]
         c = cost.UnbinnedNLL(ms[indices], model)
         # 100% signal starting condition
-        m_1 = Minuit(c, z=1.0, b=truths["b"])
-        m_1.limits["z"] = (0, 1)
+        m_1 = Minuit(c, z=1.0, b=truths['b'])
+        m_1.limits['z'] = (0, 1)
         m_1.migrad()
         # 100% background starting condition
-        m_2 = Minuit(c, z=0.0, b=truths["b"])
-        m_2.limits["z"] = (0, 1)
+        m_2 = Minuit(c, z=0.0, b=truths['b'])
+        m_2.limits['z'] = (0, 1)
         m_2.migrad()
         # 50% signal / 50% background starting condition
-        m_3 = Minuit(c, z=0.5, b=truths["b"])
-        m_3.limits["z"] = (0, 1)
+        m_3 = Minuit(c, z=0.5, b=truths['b'])
+        m_3.limits['z'] = (0, 1)
         m_3.migrad()
         fits = [m_1, m_2, m_3]
         nlls = np.array([m.fval for m in fits])
@@ -222,14 +226,30 @@ def calculate_q_factors(
         n_bkg = len(ms[indices]) * (1 - best_fit.values[0])  # noqa: PD011
         b = best_fit.values[1]  # noqa: PD011
         V_ss_inv = np.sum(
-            np.array([m_sig(m) * m_sig(m) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms[indices]]), axis=0
+            np.array(
+                [
+                    m_sig(m) * m_sig(m) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                    for m in ms[indices]
+                ]
+            ),
+            axis=0,
         )
         V_sb_inv = np.sum(
-            np.array([m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms[indices]]),
+            np.array(
+                [
+                    m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                    for m in ms[indices]
+                ]
+            ),
             axis=0,
         )
         V_bb_inv = np.sum(
-            np.array([m_bkg(m, b) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms[indices]]),
+            np.array(
+                [
+                    m_bkg(m, b) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                    for m in ms[indices]
+                ]
+            ),
             axis=0,
         )
         Vmat_inv = np.array([[V_ss_inv, V_sb_inv], [V_sb_inv, V_bb_inv]])
@@ -237,13 +257,14 @@ def calculate_q_factors(
         try:
             V = np.linalg.inv(Vmat_inv)
         except np.linalg.LinAlgError:
-            console.print("Encountered a singular matrix, applying regularization.")
+            console.print('Encountered a singular matrix, applying regularization.')
             epsilon = 1e-5  # Small regularization term
             Vmat_inv_reg = Vmat_inv + epsilon * np.eye(Vmat_inv.shape[0])
             V = np.linalg.inv(Vmat_inv_reg)
 
         sq_factors.append(
-            (V[0, 0] * m_sig(ms[i]) + V[0, 1] * m_bkg(ms[i], b)) / (n_sig * m_sig(ms[i]) + n_bkg * m_bkg(ms[i], b))
+            (V[0, 0] * m_sig(ms[i]) + V[0, 1] * m_bkg(ms[i], b))
+            / (n_sig * m_sig(ms[i]) + n_bkg * m_bkg(ms[i], b))
         )
         q_factors.append(inplot(ms[i], *best_fit.values))  # noqa: PD011
         if plot_indices and i in plot_indices:
@@ -253,7 +274,7 @@ def calculate_q_factors(
                 z_fit=best_fit.values[0],  # noqa: PD011
                 b_fit=best_fit.values[1],  # noqa: PD011
                 event_index=i,
-                qfactor_type=f"{name}{tag}",
+                qfactor_type=f'{name}{tag}',
             )
     return np.array(q_factors), np.array(sq_factors)
 
@@ -268,25 +289,35 @@ def calculate_splot_weights(events: list[Event], sig_frac_init=0.5, b_init=0.5) 
     # Performing the fit
     c = cost.UnbinnedNLL(ms, model)
     mi = Minuit(c, sig_frac=sig_frac_init, b=b_init)
-    mi.limits["sig_frac"] = (0, 1)  # Ensuring physical bounds
-    mi.limits["b"] = (0, 1)
+    mi.limits['sig_frac'] = (0, 1)  # Ensuring physical bounds
+    mi.limits['b'] = (0, 1)
     mi.migrad()
 
     # Extract fit results for signal and background contributions
-    n_sig = len(events) * mi.values["sig_frac"]  # noqa: PD011
-    n_bkg = len(events) * (1 - mi.values["sig_frac"])  # noqa: PD011
-    b = mi.values["b"]  # noqa: PD011
+    n_sig = len(events) * mi.values['sig_frac']  # noqa: PD011
+    n_bkg = len(events) * (1 - mi.values['sig_frac'])  # noqa: PD011
+    b = mi.values['b']  # noqa: PD011
 
     # Calculate inverse variance matrix elements
     V_ss_inv = np.sum([m_sig(m) ** 2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms])
-    V_sb_inv = np.sum([m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms])
-    V_bb_inv = np.sum([m_bkg(m, b) ** 2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms])
+    V_sb_inv = np.sum(
+        [m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms]
+    )
+    V_bb_inv = np.sum(
+        [m_bkg(m, b) ** 2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms]
+    )
     Vmat_inv = np.array([[V_ss_inv, V_sb_inv], [V_sb_inv, V_bb_inv]])
     V = np.linalg.inv(Vmat_inv)
 
     # Calculate sWeights and bWeights for each event
-    sweights = [(V[0, 0] * m_sig(m) + V[0, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) for m in ms]
-    bweights = [(V[1, 0] * m_sig(m) + V[1, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) for m in ms]
+    sweights = [
+        (V[0, 0] * m_sig(m) + V[0, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))
+        for m in ms
+    ]
+    bweights = [
+        (V[1, 0] * m_sig(m) + V[1, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))
+        for m in ms
+    ]
 
     # Combine sweights and bweights into a two-dimensional array
     return np.vstack((sweights, bweights)).T  # Transpose to get the correct shape
@@ -311,7 +342,7 @@ def fit_angles(
     def _cost(p00: float, p1n1: float, p10: float, *args) -> float:  # noqa: ARG001
         return wunll([p00, p1n1, p10])
 
-    m = Minuit(_cost, p00=truths["p00"], p1n1=truths["p1n1"], p10=truths["p10"])
+    m = Minuit(_cost, p00=truths['p00'], p1n1=truths['p1n1'], p10=truths['p10'])
     m.migrad()
     m.minos(cl=1)
     return m
@@ -325,7 +356,7 @@ def fit_t(events: list[Event], weights: np.ndarray | None = None):
     def _cost(tau_sig: float, *args) -> float:  # noqa: ARG001
         return wunll([tau_sig])
 
-    m = Minuit(_cost, tau_sig=truths["tau_sig"])
+    m = Minuit(_cost, tau_sig=truths['tau_sig'])
     m.migrad()
     m.minos(cl=1)
     return m
@@ -339,7 +370,7 @@ def fit_g(events: list[Event], weights: np.ndarray | None = None):
     def _cost(sigma_sig: float, *args) -> float:  # noqa: ARG001
         return wunll([sigma_sig])
 
-    m = Minuit(_cost, sigma_sig=truths["sigma_sig"])
+    m = Minuit(_cost, sigma_sig=truths['sigma_sig'])
     m.migrad()
     m.minos(cl=1)
     return m
@@ -373,10 +404,10 @@ def get_results(method: str, events, weights=None) -> Result:
     return Result(
         method,
         [
-            ("p00", mi_angles.values["p00"], mi_angles.errors["p00"]),  # noqa: PD011
-            ("p1n1", mi_angles.values["p1n1"], mi_angles.errors["p1n1"]),  # noqa: PD011
-            ("p10", mi_angles.values["p10"], mi_angles.errors["p10"]),  # noqa: PD011
-            ("tau_sig", mi_t.values["tau_sig"], mi_t.errors["tau_sig"]),  # noqa: PD011
-            ("sigma_sig", mi_g.values["sigma_sig"], mi_g.errors["sigma_sig"]),  # noqa: PD011
+            ('p00', mi_angles.values['p00'], mi_angles.errors['p00']),  # noqa: PD011
+            ('p1n1', mi_angles.values['p1n1'], mi_angles.errors['p1n1']),  # noqa: PD011
+            ('p10', mi_angles.values['p10'], mi_angles.errors['p10']),  # noqa: PD011
+            ('tau_sig', mi_t.values['tau_sig'], mi_t.errors['tau_sig']),  # noqa: PD011
+            ('sigma_sig', mi_g.values['sigma_sig'], mi_g.errors['sigma_sig']),  # noqa: PD011
         ],
     )
