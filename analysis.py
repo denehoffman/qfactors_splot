@@ -14,6 +14,7 @@ Options:
     --density-knn           Compute kNN calculations based off on local density for each event
     --radius-knn=<radius>   Use radius-based neighbors calculations with specified radius. [default: None]
     --t-dep                 Use t-dependence in mass variable
+    --num-iter=<niter>      Specifies the number of iterations to run the analysis. [default: 1]
 """
 
 # Import necessary libraries
@@ -50,6 +51,7 @@ from sklearn.neighbors import NearestNeighbors, kneighbors_graph
 plt.rc('axes', labelsize=16)
 rng = np.random.default_rng(1)
 console = Console()
+table_console = Console(record=True)
 
 # Define constants to generate MC according to https://arxiv.org/abs/0804.3382
 m_min, m_max = 0.68, 0.88
@@ -81,6 +83,8 @@ ERROR_RED = '#CC3311'
 # CMAP = LinearSegmentedColormap.from_list("analysis", colors, N=1000)
 CMAP = 'viridis'
 
+# Flag to determine if the iteration files should be wiped (i.e. start fresh)
+first_access = True
 
 # Define an Event namedtuple for easy handling of data
 class Event(NamedTuple):
@@ -462,7 +466,7 @@ def plot_events(
     plt.close()
 
 
-def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='generated_data.png', directory='study'):
+def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='generated_data.png', plot_dir="plots"):
     ms_sig = [e.mass for e in events_sig]
     costhetas_sig = [e.costheta for e in events_sig]
     phis_sig = [e.phi for e in events_sig]
@@ -552,7 +556,7 @@ def plot_all_events(events_sig: list[Event], events_bkg: list[Event], filename='
     ax[2, 3].legend(loc='upper right')
 
     plt.tight_layout()
-    plt.savefig(Path(directory).resolve() / filename, dpi=300)
+    plt.savefig(os.path.join(plot_dir, filename), dpi=300)
     plt.close()
 
 
@@ -807,6 +811,18 @@ def fit_g(events: list[Event], weights: np.ndarray | None = None):
     m.minos(cl=1)
     return m
 
+def write_fit_results(file, results, header="Results", iteration=None):
+    """
+    Write the fit results to a specified file.
+    """
+    if iteration is not None:
+        file.write(f"Iteration {iteration} - {header}:\n")
+    else:
+        file.write(f"{header}:\n")
+    
+    for result in results:
+        file.write(f"{result[0]} = {result[1]}\n")
+    file.write("\n")
 
 def plot_qfactor_fit(mstar, ms, z_fit: float, b_fit: float, event_index: int, qfactor_type: str, directory='study'):
     # Combined model for the fit
@@ -952,6 +968,9 @@ def main():
     use_density_knn = args['--density-knn']
     use_radius_knn = args['--radius-knn']
     t_dep = args['--t-dep']
+    num_iterations = int(args['--num-iter'])
+
+
 
     if use_radius_knn != 'None':
         try:
@@ -992,32 +1011,6 @@ def main():
     with console.status('Plotting events'):
         plot_all_events(events_sig, events_bkg, filename='all_events.png', directory=directory)
     events_all = events_sig + events_bkg
-
-    t = Table(title='Fit Results')
-    t.add_column('Weighting Method')
-    t.add_column('ρ⁰₀₀')
-    t.add_column('ρ⁰₁,₋₁')
-    t.add_column('Re[ρ⁰₁₀]')
-    t.add_column('τ')
-    t.add_column('σ')
-    t.add_row(
-        'Truth',
-        f'{p00_true:.3f}',
-        f'{p1n1_true:.3f}',
-        f'{p10_true:.3f}',
-        f'{t_true:.3f}',
-        f'{g_true:.3f}',
-        end_section=True,
-    )
-    latex_table = rf"""
-\begin{{table}}
-\centering
-\begin{{tabular}}{{lccccc}}\toprule
-Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & $\tau$ & $\sigma$ \\ \midrule
-\textbf{{Truth}} & \textbf{{{p00_true:.3f}}} & \textbf{{{p1n1_true:.3f}}} & \textbf{{{p10_true:.3f}}} & \textbf{{{t_true:.3f}}} & \textbf{{{g_true:.3f}}} \\ \midrule
-"""
-
-    # console.print(latex_table)
 
     def colorize_by_number(
         fit: float,
@@ -1123,317 +1116,255 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         g_fit = colorize_by_number(res_g.values['g'], res_g.errors['g'], g_true)
         return [p00_fit, p1n1_fit, p10_fit, t_fit, g_fit]
 
-    plot_events(events_bkg, events_sig, weights=None, filename='bkg_no_weights.png', directory=directory)
-    plot_events(events_sig, events_sig, weights=None, filename='sig_no_weights.png', directory=directory)
-    plot_events(events_all, events_sig, weights=None, filename='all_no_weights.png', directory=directory)
-    t.add_row('None', *get_results(events_all, weights=None))
-    latex_table += (
-        rf"No Weights & {' & '.join(get_results(events_all, weights=None, latex=True))} \\ \cmidrule(lr){{2-6}}" + '\n'
-    )
-    # console.print(t)
-    # console.print(latex_table)
+    # Define weights functions and descriptions for various analyses
+    analysis_config = {
+        "No Weights": {
+            "weight_func": None,
+            "description": "No Weights"
+        },
+        "Sideband": {
+            "weight_func": calculate_sideband_weights,
+            "description": "Sideband Subtraction"
+        },
+        "InPlot": {
+            "weight_func": calculate_inplot,
+            "description": "InPlot Analysis"
+        },
+        "sPlot": {
+            "weight_func": lambda events: calculate_splot_weights(events)[:, 0],
+            "description": "sPlot Analysis"
+        },
+        "Q-Factor": {
+            "weight_func": lambda events: calculate_q_factors(
+                                                        events,
+                                                        phase_space=np.array([[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]),
+                                                        name='angles',
+                                                        num_knn=num_knn,
+                                                        use_density_knn=use_density_knn,
+                                                        use_radius_knn=use_radius_knn,
+                                                        )[0],
+            "description": "Q-Factor Analysis"
+        },
+        "sQ-Factor": {
+            "weight_func": lambda events: calculate_q_factors(
+                                                        events,
+                                                        phase_space=np.array([[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]),
+                                                        name='angles',
+                                                        num_knn=num_knn,
+                                                        use_density_knn=use_density_knn,
+                                                        use_radius_knn=use_radius_knn,
+                                                        )[1],
+            "description": "sQ-Factor Analysis"
+        },
+        "Q-Factor_t": {
+            "weight_func": lambda events: calculate_q_factors(
+                                                        events,
+                                                        phase_space=np.array(
+                                                            [
+                                                                [
+                                                                    e.costheta / (2 / 3),
+                                                                    e.phi / (2 * np.pi**3 / 3),
+                                                                    e.t / ((t_max**3 - t_min**3) / 3),
+                                                                    ]
+                                                                for e in events
+                                                            ]),
+                                                        name='angles_t',
+                                                        num_knn=num_knn,
+                                                        use_density_knn=use_density_knn,
+                                                        use_radius_knn=use_radius_knn,
+                                                        )[0],
+            "description": "Q-Factor Analysis (with t)"
+        },
+        "sQ-Factor_t": {                                                                                   
+            "weight_func": lambda events: calculate_q_factors(
+                                                        events,
+                                                        phase_space=np.array(
+                                                            [
+                                                                [
+                                                                    e.costheta / (2 / 3),
+                                                                    e.phi / (2 * np.pi**3 / 3),
+                                                                    e.t / ((t_max**3 - t_min**3) / 3),
+                                                                    ]
+                                                                for e in events
+                                                            ]),
+                                                        name='angles_t',
+                                                        num_knn=num_knn,
+                                                        use_density_knn=use_density_knn,
+                                                        use_radius_knn=use_radius_knn,
+                                                        )[1],
+            "description": "sQ-Factor Analysis (with t)"
+        },
+        "Q-Factor_g": {
+            "weight_func": lambda events: calculate_q_factors(
+                                                        events,
+                                                        phase_space=np.array(
+                                                            [
+                                                                [
+                                                                    e.costheta / (2 / 3),
+                                                                    e.phi / (2 * np.pi**3 / 3),
+                                                                    e.g / ((g_max**3 - g_min**3) / 3),
+                                                                    ]
+                                                                for e in events
+                                                            ]),
+                                                        name='angles_g',
+                                                        num_knn=num_knn,
+                                                        use_density_knn=use_density_knn,
+                                                        use_radius_knn=use_radius_knn,
+                                                        )[0],
+            "description": "Q-Factor Analysis (with g)"
+        },
+        "sQ-Factor_g": {                                                                                                                                                                                          
+            "weight_func": lambda events: calculate_q_factors(
+                                                        events,
+                                                        phase_space=np.array(
+                                                            [
+                                                                [
+                                                                    e.costheta / (2 / 3),
+                                                                    e.phi / (2 * np.pi**3 / 3),
+                                                                    e.g / ((g_max**3 - g_min**3) / 3),
+                                                                    ]
+                                                                for e in events
+                                                            ]),
+                                                        name='angles_g',
+                                                        num_knn=num_knn,
+                                                        use_density_knn=use_density_knn,
+                                                        use_radius_knn=use_radius_knn,
+                                                        )[1],
+            "description": "sQ-Factor Analysis (with g)"
+        },
+        "Q-Factor_t_g": {
+            "weight_func": lambda events: calculate_q_factors(
+                                                        events,
+                                                        phase_space=np.array(
+                                                            [
+                                                                [
+                                                                    e.costheta / (2 / 3),
+                                                                    e.phi / (2 * np.pi**3 / 3),
+                                                                    e.t / ((t_max**3 - t_min**3) / 3),
+                                                                    e.g / ((g_max**3 - g_min**3) / 3),
+                                                                    ]
+                                                                for e in events_all
+                                                            ]),
+                                                        name='angles_t_g',
+                                                        num_knn=num_knn,
+                                                        use_density_knn=use_density_knn,
+                                                        use_radius_knn=use_radius_knn,
+                                                        )[0],
+            "description": "Q-Factor Analysis (with t & g)"
+        },
+        "sQ-Factor_t_g": {                                                                                   
+            "weight_func": lambda events: calculate_q_factors(
+                                                        events,
+                                                        phase_space=np.array(
+                                                            [
+                                                                [
+                                                                    e.costheta / (2 / 3),
+                                                                    e.phi / (2 * np.pi**3 / 3),
+                                                                    e.t / ((t_max**3 - t_min**3) / 3),
+                                                                    e.g / ((g_max**3 - g_min**3) / 3),
+                                                                    ]
+                                                                for e in events_all
+                                                            ]),
+                                                        name='angles_t_g',
+                                                        num_knn=num_knn,
+                                                        use_density_knn=use_density_knn,
+                                                        use_radius_knn=use_radius_knn,
+                                                        )[1],
+            "description": "sQ-Factor Analysis (with t & g)"
+        }
+        
+        
+    }
+    
+    # Directory for storing results
+    results_dir = "results"
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+    plots_dir = "plots"
+    if not os.path.exists(plots_dir):
+        os.makedirs(plots_dir)
 
-    sideband_weights = calculate_sideband_weights(events_all)
-    plot_events(
-        events_bkg, events_sig, weights=sideband_weights[num_sig:], filename='bkg_sideband.png', directory=directory
-    )
-    plot_events(
-        events_sig, events_sig, weights=sideband_weights[:num_sig], filename='sig_sideband.png', directory=directory
-    )
-    plot_events(events_all, events_sig, weights=sideband_weights, filename='all_sideband.png', directory=directory)
-    t.add_row('Sideband Subtraction', *get_results(events_all, weights=sideband_weights))
-    latex_table += (
-        rf"Sideband Subtraction & {' & '.join(get_results(events_all, weights=sideband_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + '\n'
-    )
-    # console.print(t)
-    # console.print(latex_table)
+    # For labeling the results                                                                                                                                                                       
+    keys = ['ρ⁰₀₀', 'ρ⁰₁,₋₁', 'Re[ρ⁰₁₀]', 'τ', 'σ']
+    global first_access
 
-    inplot_weights = calculate_inplot(events_all)
-    plot_events(
-        events_bkg, events_sig, weights=inplot_weights[num_sig:], filename='bkg_inplot.png', directory=directory
-    )
-    plot_events(
-        events_sig, events_sig, weights=inplot_weights[:num_sig], filename='sig_inplot.png', directory=directory
-    )
-    plot_events(events_all, events_sig, weights=inplot_weights, filename='all_inplot.png', directory=directory)
-    t.add_row('inPlot', *get_results(events_all, weights=inplot_weights))
-    latex_table += (
-        rf"inPlot (Q-factors with $k=N$) & {' & '.join(get_results(events_all, weights=inplot_weights, latex=True))} \\"
-        + '\n'
-    )
-    # console.print(t)
-    # console.print(latex_table)
+    # Handle each iteration
+    for iteration in range(num_iterations):
+        console.print(f"Starting Iteration {iteration}", style="bold yellow")
+        first_access = True  # Reset this flag at the start of each iteration    
 
-    splot_weights = calculate_splot_weights(events_all)[:, 0]
-    plot_events(events_bkg, events_sig, weights=splot_weights[num_sig:], filename='bkg_splot.png', directory=directory)
-    plot_events(events_sig, events_sig, weights=splot_weights[:num_sig], filename='sig_splot.png', directory=directory)
-    plot_events(events_all, events_sig, weights=splot_weights, filename='all_splot.png', directory=directory)
-    t.add_row('sPlot', *get_results(events_all, weights=splot_weights))
-    latex_table += (
-        rf"sPlot & {' & '.join(get_results(events_all, weights=splot_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + '\n'
-    )
-    # console.print(t)
-    # console.print(latex_table)
+        t = Table(title='Fit Results')
+        t.add_column('Weighting Method')
+        t.add_column('ρ⁰₀₀')
+        t.add_column('ρ⁰₁,₋₁')
+        t.add_column('Re[ρ⁰₁₀]')
+        t.add_column('τ')
+        t.add_column('σ')
+        t.add_row(
+            'Truth',
+            f'{p00_true:.3f}',
+            f'{p1n1_true:.3f}',
+            f'{p10_true:.3f}',
+            f'{t_true:.3f}',
+            f'{g_true:.3f}',
+            end_section=True,
+        )
+        latex_table = rf"""
+            \begin{{table}}
+            \centering
+            \begin{{tabular}}{{lccccc}}\toprule
+            Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & $\tau$ & $\sigma$ \\ \midrule
+            \textbf{{Truth}} & \textbf{{{p00_true:.3f}}} & \textbf{{{p1n1_true:.3f}}} & \textbf{{{p10_true:.3f}}} & \textbf{{{t_true:.3f}}} & \textbf{{{g_true:.3f}}} \\ \midrule
+            """
 
-    q_factors_weights, sq_factors_weights = calculate_q_factors(
-        events_all,
-        phase_space=np.array([[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3)] for e in events_all]),
-        name='angles',
-        num_knn=num_knn,
-        use_density_knn=use_density_knn,
-        use_radius_knn=use_radius_knn,
-        plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
-        directory=directory,
-    )
-    plot_events(
-        events_bkg,
-        events_sig,
-        weights=q_factors_weights[num_sig:],
-        filename=f'bkg_q_factor{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_sig,
-        events_sig,
-        weights=q_factors_weights[:num_sig],
-        filename=f'sig_q_factor{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_all, events_sig, weights=q_factors_weights, filename=f'all_q_factor{tag}.png', directory=directory
-    )
-    t.add_row('Q-Factors', *get_results(events_all, weights=q_factors_weights))
-    latex_table += (
-        rf"Q-Factors ($k=100$) & {' & '.join(get_results(events_all, weights=q_factors_weights, latex=True))} \\" + '\n'
-    )
-    plot_events(
-        events_bkg,
-        events_sig,
-        weights=sq_factors_weights[num_sig:],
-        filename=f'bkg_sq_factor{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_sig,
-        events_sig,
-        weights=sq_factors_weights[:num_sig],
-        filename=f'sig_sq_factor{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_all, events_sig, weights=sq_factors_weights, filename=f'all_sq_factor{tag}.png', directory=directory
-    )
-    t.add_row('sQ-Factors', *get_results(events_all, weights=sq_factors_weights))
-    latex_table += (
-        rf"sQ-Factors ($k=100$) & {' & '.join(get_results(events_all, weights=sq_factors_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + '\n'
-    )
-    # console.print(t)
-    # console.print(latex_table)
+        # Inside each iteration, process each analysis type
+        for analysis_name, config in analysis_config.items():                                                                                                               
+            print(f"Processing {analysis_name} -- Iteration {iteration}")
+            results_filename = f"fit_results_{iteration}.txt"
+            filepath = os.path.join(results_dir, results_filename)
+           
+            description = config['description']
 
-    q_factors_t_weights, sq_factors_t_weights = calculate_q_factors(
-        events_all,
-        phase_space=np.array(
-            [[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3), e.t / ((t_max**3 - t_min**3) / 3)] for e in events_all]
-        ),
-        name='angles_t',
-        num_knn=num_knn,
-        use_density_knn=use_density_knn,
-        use_radius_knn=use_radius_knn,
-        plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
-        directory=directory,
-    )
-    plot_events(
-        events_bkg,
-        events_sig,
-        weights=q_factors_t_weights[num_sig:],
-        filename=f'bkg_q_factor_t{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_sig,
-        events_sig,
-        weights=q_factors_t_weights[:num_sig],
-        filename=f'sig_q_factor_t{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_all, events_sig, weights=q_factors_t_weights, filename=f'all_q_factor_t{tag}.png', directory=directory
-    )
-    t.add_row('Q-Factors (with t)', *get_results(events_all, weights=q_factors_t_weights))
-    latex_table += (
-        rf"Q-Factors (with t) & {' & '.join(get_results(events_all, weights=q_factors_t_weights, latex=True))} \\"
-        + '\n'
-    )
-    plot_events(
-        events_bkg,
-        events_sig,
-        weights=sq_factors_t_weights[num_sig:],
-        filename=f'bkg_sq_factor_t{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_sig,
-        events_sig,
-        weights=sq_factors_t_weights[:num_sig],
-        filename=f'sig_sq_factor_t{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_all, events_sig, weights=sq_factors_t_weights, filename=f'all_sq_factor_t{tag}.png', directory=directory
-    )
-    t.add_row('sQ-Factors (with t)', *get_results(events_all, weights=sq_factors_t_weights))
-    latex_table += (
-        rf"sQ-Factors (with t) & {' & '.join(get_results(events_all, weights=sq_factors_t_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + '\n'
-    )
-    # console.print(t)
-    # console.print(latex_table)
+            # Determine the mode based on whether it's the first access in this run
+            file_mode = 'w' if first_access else 'a'
+            first_access = False  # Inputs will append to the file
+            with open(filepath, file_mode) as file:
+                # Calculate weights for this analysis type
+                if config['weight_func'] is not None:
+                    weights = config['weight_func'](events_all)
+                else:
+                    # No weights, use ones as weights for all events
+                    weights = np.ones(len(events_all))
+            
+                print(f"Weights for {analysis_name}: {np.array(weights).shape}, First few values: {weights[:5]}\n")
+                signal_weights, bkg_weights = weights[:num_sig], weights[num_sig:]
 
-    q_factors_g_weights, sq_factors_g_weights = calculate_q_factors(
-        events_all,
-        phase_space=np.array(
-            [[e.costheta / (2 / 3), e.phi / (2 * np.pi**3 / 3), e.g / ((g_max**3 - g_min**3) / 3)] for e in events_all]
-        ),
-        name='angles_g',
-        num_knn=num_knn,
-        use_density_knn=use_density_knn,
-        use_radius_knn=use_radius_knn,
-        plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
-        directory=directory,
-    )
-    plot_events(
-        events_bkg,
-        events_sig,
-        weights=q_factors_g_weights[num_sig:],
-        filename=f'bkg_q_factor_g{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_sig,
-        events_sig,
-        weights=q_factors_g_weights[:num_sig],
-        filename=f'sig_q_factor_g{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_all, events_sig, weights=q_factors_g_weights, filename=f'all_q_factor_g{tag}.png', directory=directory
-    )
-    t.add_row('Q-Factors (with g)', *get_results(events_all, weights=q_factors_g_weights))
-    latex_table += (
-        rf"Q-Factors (with g) & {' & '.join(get_results(events_all, weights=q_factors_g_weights, latex=True))} \\"
-        + '\n'
-    )
-    plot_events(
-        events_bkg,
-        events_sig,
-        weights=sq_factors_g_weights[num_sig:],
-        filename=f'bkg_sq_factor_g{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_sig,
-        events_sig,
-        weights=sq_factors_g_weights[:num_sig],
-        filename=f'sig_sq_factor_g{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_all, events_sig, weights=sq_factors_g_weights, filename=f'all_sq_factor_g{tag}.png', directory=directory
-    )
-    t.add_row('sQ-Factors (with g)', *get_results(events_all, weights=sq_factors_g_weights))
-    latex_table += (
-        rf"sQ-Factors (with g) & {' & '.join(get_results(events_all, weights=sq_factors_g_weights, latex=True))} \\ \cmidrule(lr){{2-6}}"
-        + '\n'
-    )
-    # console.print(t)
-    # console.print(latex_table)
+                # Prepare data for writing
+                data_config = {
+                    "All": (events_all, weights),
+                    #"Signal": (events_sig, signal_weights),
+                    #"Background": (events_bkg, bkg_weights)
+                }
 
-    q_factors_t_g_weights, sq_factors_t_g_weights = calculate_q_factors(
-        events_all,
-        phase_space=np.array(
-            [
-                [
-                    e.costheta / (2 / 3),
-                    e.phi / (2 * np.pi**3 / 3),
-                    e.t / ((t_max**3 - t_min**3) / 3),
-                    e.g / ((g_max**3 - g_min**3) / 3),
-                ]
-                for e in events_all
-            ]
-        ),
-        name='angles_t_g',
-        num_knn=num_knn,
-        use_density_knn=use_density_knn,
-        use_radius_knn=use_radius_knn,
-        plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
-        directory=directory,
-    )
-    plot_events(
-        events_bkg,
-        events_sig,
-        weights=q_factors_t_g_weights[num_sig:],
-        filename=f'bkg_q_factor_t_g{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_sig,
-        events_sig,
-        weights=q_factors_t_g_weights[:num_sig],
-        filename=f'sig_q_factor_t_g{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_all,
-        events_sig,
-        weights=q_factors_t_g_weights,
-        filename=f'all_q_factor_t_g{tag}.png',
-        directory=directory,
-    )
-    t.add_row('Q-Factors (with t and g)', *get_results(events_all, weights=q_factors_t_g_weights))
-    latex_table += (
-        rf"Q-Factors (with t and g) & {' & '.join(get_results(events_all, weights=q_factors_t_g_weights, latex=True))} \\"
-        + '\n'
-    )
-    plot_events(
-        events_bkg,
-        events_sig,
-        weights=sq_factors_t_g_weights[num_sig:],
-        filename=f'bkg_sq_factor_t_g{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_sig,
-        events_sig,
-        weights=sq_factors_t_g_weights[:num_sig],
-        filename=f'sig_sq_factor_t_g{tag}.png',
-        directory=directory,
-    )
-    plot_events(
-        events_all,
-        events_sig,
-        weights=sq_factors_t_g_weights,
-        filename=f'all_sq_factor_t_g{tag}.png',
-        directory=directory,
-    )
-    t.add_row('sQ-Factors (with t and g)', *get_results(events_all, weights=sq_factors_t_g_weights))
-    latex_table += (
-        rf"sQ-Factors (with t and g) & {' & '.join(get_results(events_all, weights=sq_factors_t_g_weights, latex=True))} \\ \bottomrule"
-        + '\n'
-    )
-    # console.print(t)
-    # console.print(latex_table)
+                # Write results for all data 
+                for data_name, (events, data_weights) in data_config.items():
+                    result_header = f"{config['description']} Results - {data_name}"
+                    try:
+                        results = list(zip(keys, get_results(events, data_weights)))
+                        write_fit_results(file, results, header=result_header, iteration=iteration)
+                        plot_events(events_all, events_sig, weights=data_weights, filename='all_{analysis_name}_{iteration}.png')
+                        # Update LaTeX table
+                        t.add_row(description, *get_results(events, weights=data_weights))
+                        #file.write(table_console.export_text())          
+                    except Exception as write_error:
+                        print(f"Failed to write results for {data_name} under {analysis_name}: {write_error}")           
 
-    latex_table += r"""\end{tabular}
-\caption{Fit results from each weighting method. Results which deviate more than $5\sigma$ are highlighted red.}
-\label{table:fit_results}
-\end{table}
-    """
+        table_console.print(t) 
+        # After all analysis types are processed, export the table to the text file
+        with open(filepath, 'a') as file:
+            file.write(table_console.export_text())  # Export the table as text and write to the file
+        table_console.clear()
 
-    console.print(latex_table)
-    (Path(directory).resolve() / 'latex_table.txt').write_text(latex_table)
 
     if use_radius_knn:
         selected_event_index = 0  # Index of the event you want to inspect
