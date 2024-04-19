@@ -2,3 +2,4 @@
 *.txt
 .run.zsh
 .DS_Store
+pyrightconfig.json
