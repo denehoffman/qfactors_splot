@@ -1,4 +1,5 @@
 from __future__ import annotations
+from pathlib import Path
 
 import numpy as np
 import scipy.optimize as opt
@@ -172,7 +173,7 @@ def calculate_q_factors(
     use_density_knn=False,
     use_radius_knn=None,
     plot_indices: list[int] | None = None,
-    directory='study',
+    directory: str | Path = 'study',
 ) -> tuple[np.ndarray, np.ndarray]:
     ms = np.array([e.mass for e in events])
 
@@ -344,7 +345,6 @@ def fit_angles(
 
     m = Minuit(_cost, p00=truths['p00'], p1n1=truths['p1n1'], p10=truths['p10'])
     m.migrad()
-    m.minos(cl=1)
     return m
 
 
@@ -358,7 +358,6 @@ def fit_t(events: list[Event], weights: np.ndarray | None = None):
 
     m = Minuit(_cost, tau_sig=truths['tau_sig'])
     m.migrad()
-    m.minos(cl=1)
     return m
 
 
@@ -372,7 +371,6 @@ def fit_g(events: list[Event], weights: np.ndarray | None = None):
 
     m = Minuit(_cost, sigma_sig=truths['sigma_sig'])
     m.migrad()
-    m.minos(cl=1)
     return m
 
 
@@ -385,13 +383,13 @@ def calculate_theoretical_q_factors(events, b_true):
 
     # Calculate signal and background densities using the vectorized functions
     signal_densities = m_sig(masses)
-    console.print(signal_densities)
+    # console.print(signal_densities)
     background_densities = m_bkg(masses, b_true)
-    console.print(background_densities)
+    # console.print(background_densities)
 
     # Calculate total densities
     total_densities = signal_densities + background_densities
-    console.print(total_densities)
+    # console.print(total_densities)
 
     # Calculate Q-factors, handling division by zero by using np.where
     return np.where(total_densities > 0, signal_densities / total_densities, 0)

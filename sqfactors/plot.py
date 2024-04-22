@@ -32,7 +32,7 @@ def plot_events(
     signal_events: list[Event],
     weights: np.ndarray | None = None,
     filename='events.png',
-    directory='study',
+    directory: str | Path = 'study',
 ):
     ms = [e.mass for e in events]
     costhetas = [e.costheta for e in events]
@@ -145,7 +145,7 @@ def plot_all_events(
     events_sig: list[Event],
     events_bkg: list[Event],
     filename='generated_data.png',
-    directory='study',
+    directory: str | Path = 'study',
 ):
     ms_sig = [e.mass for e in events_sig]
     costhetas_sig = [e.costheta for e in events_sig]
@@ -269,7 +269,13 @@ def plot_all_events(
 
 
 def plot_qfactor_fit(
-    mstar, ms, z_fit: float, b_fit: float, event_index: int, qfactor_type: str, directory='study'
+    mstar,
+    ms,
+    z_fit: float,
+    b_fit: float,
+    event_index: int,
+    qfactor_type: str,
+    directory: str | Path = 'study',
 ):
     # Combined model for the fit
     def model(m, z, b) -> float | np.ndarray:
@@ -316,7 +322,9 @@ def plot_qfactor_fit(
     plt.close()
 
 
-def plot_radius_knn_visualization(events, selected_event_index, radius_knn, directory='study'):
+def plot_radius_knn_visualization(
+    events, selected_event_index, radius_knn, directory: str | Path = 'study'
+):
     # Extract coordinates of events
     x_coords = [
         event.costheta for event in events
@@ -357,7 +365,7 @@ def compare_q_factors(
     q_factors_theoretical,
     title='Q-Factors Comparison',
     q_factor_type='standard',
-    directory='study',
+    directory: str | Path = 'study',
 ):
     """
     Compare calculated Q-factors to the theoretical Q-factor distribution.

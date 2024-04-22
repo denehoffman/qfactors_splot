@@ -45,7 +45,7 @@ class Result:
         for variable, value, error in self.contents:
             truth = truths[variable]
             dev = Result.get_deviation(value, error, truth)
-            out += [f'[{colors[dev]}]{value}±{error}[/]']
+            out += [f'[{colors[dev]}]{value:.3f}±{error:.3f}[/]']
         return out
 
     def to_tsv(self) -> str:
@@ -111,7 +111,7 @@ class Results:
             end_section=True,
         )
         for result in self.results:
-            t.add_row(result.method, *result.to_rich())
+            t.add_row(*result.to_rich())
         yield t
 
     def as_latex(self) -> str:

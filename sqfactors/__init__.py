@@ -27,3 +27,8 @@ truths = {
 }
 
 rng = np.random.default_rng(1)
+
+
+def set_seed(n):
+    global rng
+    rng = np.random.default_rng(n)
