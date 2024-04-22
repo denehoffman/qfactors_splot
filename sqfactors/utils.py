@@ -103,11 +103,11 @@ class Results:
         t.add_column('σ')  # noqa: RUF001
         t.add_row(
             'Truth',
-            f"{truths["p00"]:.3f}",
-            f"{truths["p1n1"]:.3f}",
-            f"{truths["p10"]:.3f}",
-            f"{truths["tau_sig"]:.3f}",
-            f"{truths["sigma_sig"]:.3f}",
+            f"{truths['p00']:.3f}",
+            f"{truths['p1n1']:.3f}",
+            f"{truths['p10']:.3f}",
+            f"{truths['tau_sig']:.3f}",
+            f"{truths['sigma_sig']:.3f}",
             end_section=True,
         )
         for result in self.results:
@@ -120,7 +120,7 @@ class Results:
 \centering
 \begin{{tabular}}{{lccccc}}\toprule
 Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & $\tau$ & $\sigma$ \\ \midrule
-\textbf{{Truth}} & \textbf{{{truths["p00"]:.3f}}} & \textbf{{{truths["p1n1"]:.3f}}} & \textbf{{{truths["p10"]:.3f}}} & \textbf{{{truths["tau_sig"]:.3f}}} & \textbf{{{truths["sigma_sig"]:.3f}}} \\ \midrule
+\textbf{{Truth}} & \textbf{{{truths['p00']:.3f}}} & \textbf{{{truths['p1n1']:.3f}}} & \textbf{{{truths['p10']:.3f}}} & \textbf{{{truths['tau_sig']:.3f}}} & \textbf{{{truths['sigma_sig']:.3f}}} \\ \midrule
             """
         out += '\n'.join(result.to_latex() for result in self.results)
         out += r"""
@@ -133,6 +133,6 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
         return out
 
     def as_tsv(self) -> str:
-        out = f"Method\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\nTruth\t{truths["p00"]:.3f}\t\t{truths["p1n1"]:.3f}\t\t{truths["p10"]:.3f}\t\t{truths["tau_sig"]:.3f}\t\t{truths["sigma_sig"]:.3f}\t\n"
+        out = f"Method\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\nTruth\t{truths['p00']:.3f}\t\t{truths['p1n1']:.3f}\t\t{truths['p10']:.3f}\t\t{truths['tau_sig']:.3f}\t\t{truths['sigma_sig']:.3f}\t\n"
         out += '\n'.join(result.to_tsv() for result in self.results)
         return out
