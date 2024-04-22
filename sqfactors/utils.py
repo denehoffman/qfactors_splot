@@ -45,7 +45,7 @@ class Result:
         for variable, value, error in self.contents:
             truth = truths[variable]
             dev = Result.get_deviation(value, error, truth)
-            out += f'[{colors[dev]}]{value}±{error}[/]'
+            out += [f'[{colors[dev]}]{value}±{error}[/]']
         return out
 
     def to_tsv(self) -> str:
