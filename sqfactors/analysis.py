@@ -276,6 +276,7 @@ def calculate_q_factors(
                 b_fit=best_fit.values[1],  # noqa: PD011
                 event_index=i,
                 qfactor_type=f'{name}{tag}',
+                directory=directory,
             )
     return np.array(q_factors), np.array(sq_factors)
 
