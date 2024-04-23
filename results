@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+import sys
+from pathlib import Path
+import pandas as pd
+from rich.table import Table
+from sqfactors import console
+import numpy as np
+
+
+def zscore_and_std(x, truth_row):
+    mean_diff = x.mean() - truth_row
+    std_dev = x.std()
+    zscore = mean_diff / std_dev
+    return pd.Series([zscore, std_dev], index=['Z-Score', 'Std Dev'])
+
+
+def zscore_to_colorstr(zscore: float, max_z: float) -> str:
+    start_color = (255, 100, 180)
+    end_color = (0, 0, 0)
+    normed_zscore = abs(zscore / max_z)
+    b = 40.0
+    a = 1.0 / (1 - np.exp(-b))
+    scaled_zscore = a - a * np.exp(-b * normed_zscore)
+    r = str(int(start_color[0] + (end_color[0] - start_color[0]) * scaled_zscore))
+    g = str(int(start_color[1] + (end_color[1] - start_color[1]) * scaled_zscore))
+    b = str(int(start_color[2] + (end_color[2] - start_color[2]) * scaled_zscore))
+    return f'rgb({r},{g},{b})'
+
+
+if __name__ == '__main__':
+    fit_file = Path(sys.argv[1])
+    t = pd.read_table(fit_file)
+    t = t[[col for col in t.columns if 'Error' not in col and 'Iteration' not in col]]
+    m = t.groupby('Method')
+    mean = m.mean()
+    sigma = m.std()
+    truth = t.iloc[0]
+    z = (mean - truth) / sigma
+    out = z[[col for col in z.columns if 'Method' not in col]]
+    index_order = [
+        'Truth',
+        'No Weights Analysis',
+        'InPlot Analysis',
+        'Sideband Subtraction Analysis',
+        'Q-Factor Analysis',
+        'Q-Factor Analysis (with t)',
+        'Q-Factor Analysis (with g)',
+        'Q-Factor Analysis (with t & g)',
+        'sPlot Analysis',
+        'sQ-Factor Analysis',
+        'sQ-Factor Analysis (with t)',
+        'sQ-Factor Analysis (with g)',
+        'sQ-Factor Analysis (with t & g)',
+    ]
+    out = out.reindex(index=index_order)
+    tab = Table()
+    tab.add_column('Method')
+    for col in out.columns:
+        tab.add_column(col)
+        tab.add_column(col + ' sigma')
+    for ind_r, row in out.iterrows():
+        if ind_r == 'Truth':
+            continue
+        rich_row = []
+        sig_row = sigma.loc[ind_r]
+        for col in out.columns:
+            max_z = out[col].abs().max()
+            color_str = zscore_to_colorstr(row[col], max_z)
+            console.print(f'Column is ---> {col}')
+            console.print(color_str)
+            rich_row += [f'[{color_str}]{row[col]:.3f}[/]']
+            rich_row += [f'{sig_row[col]:.3f}']
+        tab.add_row(str(ind_r), *rich_row, end_section=True)
+    console.print(tab)
