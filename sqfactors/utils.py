@@ -55,7 +55,7 @@ class Result:
             + '\t'
             + self.method
             + '\t'
-            + '\t'.join(f'{value:.3f}\t{error:.3f}' for (_, value, error) in self.contents)
+            + '\t'.join(f'{value:.7f}\t{error:.7f}' for (_, value, error) in self.contents)
         )
 
     def to_res(self) -> str:
