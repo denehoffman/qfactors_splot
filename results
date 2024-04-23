@@ -7,13 +7,6 @@ from sqfactors import console
 import numpy as np
 
 
-def zscore_and_std(x, truth_row):
-    mean_diff = x.mean() - truth_row
-    std_dev = x.std()
-    zscore = mean_diff / std_dev
-    return pd.Series([zscore, std_dev], index=['Z-Score', 'Std Dev'])
-
-
 def zscore_to_colorstr(zscore: float, max_z: float) -> str:
     start_color = (255, 100, 180)
     end_color = (0, 0, 0)
@@ -66,8 +59,6 @@ if __name__ == '__main__':
         for col in out.columns:
             max_z = out[col].abs().max()
             color_str = zscore_to_colorstr(row[col], max_z)
-            console.print(f'Column is ---> {col}')
-            console.print(color_str)
             rich_row += [f'[{color_str}]{row[col]:.3f}[/]']
             rich_row += [f'{sig_row[col]:.3f}']
         tab.add_row(str(ind_r), *rich_row, end_section=True)
