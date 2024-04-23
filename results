@@ -9,7 +9,7 @@ import numpy as np
 
 def zscore_to_colorstr(zscore: float, min_z: float, max_z: float) -> str:
     start_color = (255, 100, 180)
-    end_color = (0, 0, 0)
+    end_color = (0, 180, 140)
     normed_zscore = (zscore - min_z) / (max_z - min_z)
     b = 40.0
     a = 1.0 / (1 - np.exp(-b))
