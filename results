@@ -25,6 +25,7 @@ def zscore_to_colorstr(zscore: float, min_z: float, max_z: float) -> str:
 if __name__ == '__main__':
     fit_file = Path(sys.argv[1])
     t = pd.read_table(fit_file)
+    max_iter = t['Iteration'].max()
     t = t[[col for col in t.columns if 'Error' not in col and 'Iteration' not in col]]
     truth = t.iloc[0]
 
@@ -54,7 +55,7 @@ if __name__ == '__main__':
     ]
     out = out.reindex(index=index_order)
     tab = Table()
-    tab.add_column('Method')
+    tab.add_column(f'Method {max_iter}x')
     for col in out.columns:
         tab.add_column(col)
         tab.add_column('<- σ/μ')
