@@ -162,3 +162,4 @@ cython_debug/
 *.png
 *.txt
 .DS_Store
+study*

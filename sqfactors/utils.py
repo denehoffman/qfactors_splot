@@ -13,8 +13,9 @@ if TYPE_CHECKING:
 
 
 class Result:
-    def __init__(self, method: str, contents: list[tuple[str, float, float]]):
+    def __init__(self, method: str, iteration: int, contents: list[tuple[str, float, float]]):
         self.method = method
+        self.iteration = iteration
         self.contents = contents
 
     @staticmethod
@@ -50,13 +51,15 @@ class Result:
 
     def to_tsv(self) -> str:
         return (
-            self.method
+            str(self.iteration)
+            + '\t'
+            + self.method
             + '\t'
             + '\t'.join(f'{value:.3f}\t{error:.3f}' for (_, value, error) in self.contents)
         )
 
     def to_res(self) -> str:
-        return f'=== {self.method} ===\n' + '\n'.join(
+        return f'=== {self.method} ===\nIteration: {self.iteration}\n' + '\n'.join(
             f'{variable} = {value:.5f} +/- {error:.5f}'
             for (variable, value, error) in self.contents
         )
@@ -67,31 +70,38 @@ class Results:
         self.results = results if results else []
 
     @staticmethod
+    def tsv_header() -> str:
+        return f"Iteration\tMethod\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\n0\tTruth\t{truths['p00']:.3f}\t0.000\t{truths['p1n1']:.3f}\t0.000\t{truths['p10']:.3f}\t0.000\t{truths['tau_sig']:.3f}\t0.000\t{truths['sigma_sig']:.3f}\t0.000\n"
+
+    @staticmethod
     def load_from_res_file(res_path: Path | str) -> Results:
         res_path = Path(res_path) if isinstance(res_path, str) else res_path
         res_text = res_path.read_text()
         header_pattern = re.compile(r'===(.*?)===\s')
-        headers = re.findall(header_pattern, res_text)
         contents = re.split(header_pattern, res_text)
         results = []
-        for header, content in zip(headers, contents):
+        for header, content in zip(contents[1::2], contents[2::2]):
+            header = header.strip()
+            content_lines = content.splitlines()
+            iteration = int(content_lines[0].split(' ')[1])
             fit_values = [
                 (
                     row.split(' = ')[0],
                     float(row.split(' = ')[1].split(' +/- ')[0]),
                     float(row.split(' = ')[1].split(' +/- ')[1]),
                 )
-                for row in content.splitlines()
+                for row in content_lines[1:]
             ]
-            results.append(Result(header, fit_values))
+            results.append(Result(header, iteration, fit_values))
         return Results(results)
 
     def write_row(self, result: Result, output: Path | str | None):
         self.results.append(result)
         if output is not None:
-            self.out_file = Path(output) if isinstance(output, str) else output
-            with self.out_file.open('a') as out_file:
-                out_file.write('\n' + result.to_res())
+            out_path = Path(output) if isinstance(output, str) else output
+            data = out_path.read_text().strip('\n').split('\n')
+            data += result.to_res().split('\n')
+            out_path.write_text('\n'.join(data))
 
     def __rich_console__(self, _console: Console, _options: ConsoleOptions) -> RenderResult:
         t = Table(title='Fit Results')
@@ -132,7 +142,7 @@ Weighting Method & $\rho^0_{{00}}$ & $\rho^0_{{1,-1}}$ & $\Re[\rho^0_{{10}}]$ & 
             """
         return out
 
-    def as_tsv(self) -> str:
-        out = f"Method\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\nTruth\t{truths['p00']:.3f}\t\t{truths['p1n1']:.3f}\t\t{truths['p10']:.3f}\t\t{truths['tau_sig']:.3f}\t\t{truths['sigma_sig']:.3f}\t\n"
-        out += '\n'.join(result.to_tsv() for result in self.results)
-        return out
+    def as_tsv(self, header: bool = True) -> str:
+        if header:
+            return self.tsv_header() + '\n'.join(result.to_tsv() for result in self.results) + '\n'
+        return '\n'.join(result.to_tsv() for result in self.results) + '\n'

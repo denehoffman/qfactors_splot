@@ -396,12 +396,13 @@ def calculate_theoretical_q_factors(events, b_true):
     return np.where(total_densities > 0, signal_densities / total_densities, 0)
 
 
-def get_results(method: str, events, weights=None) -> Result:
+def get_results(method: str, iteration: int, events: list[Event], weights=None) -> Result:
     mi_angles = fit_angles(events, weights=weights)
     mi_t = fit_t(events, weights=weights)
     mi_g = fit_g(events, weights=weights)
     return Result(
         method,
+        iteration,
         [
             ('p00', mi_angles.values['p00'], mi_angles.errors['p00']),  # noqa: PD011
             ('p1n1', mi_angles.values['p1n1'], mi_angles.errors['p1n1']),  # noqa: PD011
