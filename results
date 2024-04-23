@@ -7,16 +7,18 @@ from sqfactors import console
 import numpy as np
 
 
-def zscore_to_colorstr(zscore: float, max_z: float) -> str:
+def zscore_to_colorstr(zscore: float, min_z: float, max_z: float) -> str:
     start_color = (255, 100, 180)
     end_color = (0, 0, 0)
-    normed_zscore = abs(zscore / max_z)
+    normed_zscore = (zscore - min_z) / (max_z - min_z)
     b = 40.0
     a = 1.0 / (1 - np.exp(-b))
     scaled_zscore = a - a * np.exp(-b * normed_zscore)
     r = str(int(start_color[0] + (end_color[0] - start_color[0]) * scaled_zscore))
     g = str(int(start_color[1] + (end_color[1] - start_color[1]) * scaled_zscore))
     b = str(int(start_color[2] + (end_color[2] - start_color[2]) * scaled_zscore))
+    if scaled_zscore == 0:
+        return 'rgb(255,0,0)'
     return f'rgb({r},{g},{b})'
 
 
@@ -24,17 +26,22 @@ if __name__ == '__main__':
     fit_file = Path(sys.argv[1])
     t = pd.read_table(fit_file)
     t = t[[col for col in t.columns if 'Error' not in col and 'Iteration' not in col]]
+    truth = t.iloc[0]
+
+    def f(row):
+        return (row[1:] - truth[1:]).apply(lambda v: np.sqrt(v * v))
+
+    t.iloc[:, 1:] = t.apply(f, axis=1)
     m = t.groupby('Method')
     mean = m.mean()
     sigma = m.std()
-    truth = t.iloc[0]
-    z = (mean - truth) / sigma
+    z = mean / sigma
     out = z[[col for col in z.columns if 'Method' not in col]]
     index_order = [
         'Truth',
         'No Weights Analysis',
-        'InPlot Analysis',
         'Sideband Subtraction Analysis',
+        'InPlot Analysis',
         'Q-Factor Analysis',
         'Q-Factor Analysis (with t)',
         'Q-Factor Analysis (with g)',
@@ -50,16 +57,22 @@ if __name__ == '__main__':
     tab.add_column('Method')
     for col in out.columns:
         tab.add_column(col)
-        tab.add_column(col + ' sigma')
-    for ind_r, row in out.iterrows():
-        if ind_r == 'Truth':
+        tab.add_column('<- σ/μ')
+    for ind, method in enumerate(index_order):
+        if method == 'Truth':
             continue
         rich_row = []
-        sig_row = sigma.loc[ind_r]
+        out_row = out.loc[method]
+        sig_row = (sigma / mean).abs().loc[method]
         for col in out.columns:
+            min_z = out[col].abs().min()
             max_z = out[col].abs().max()
-            color_str = zscore_to_colorstr(row[col], max_z)
-            rich_row += [f'[{color_str}]{row[col]:.3f}[/]']
-            rich_row += [f'{sig_row[col]:.3f}']
-        tab.add_row(str(ind_r), *rich_row, end_section=True)
+            color_str = zscore_to_colorstr(out_row[col], min_z, max_z)
+            if abs(out_row[col]) == min_z:
+                color_str += ' bold'
+            rich_row += [f'[{color_str}]{out_row[col]:.3f}[/]']
+            rich_row += [f'[rgb(100,100,100)]{sig_row[col]:.3f}[/]']
+        tab.add_row(
+            str(method).replace(' Analysis', ''), *rich_row, end_section=(ind == 2 or ind == 7)
+        )
     console.print(tab)
