@@ -26,7 +26,12 @@ truths = {
     'sigma_bkg': 0.56,
 }
 
-rng = np.random.default_rng(1)
+rng = np.random.default_rng(0)
+
+
+def r():
+    global rng
+    return rng
 
 
 def set_seed(n):

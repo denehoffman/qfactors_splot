@@ -26,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 from docopt import docopt
-from sqfactors import console, plot, set_seed, rng
+from sqfactors import console, plot, set_seed, r
 from sqfactors.analysis import (
     bounds,
     calculate_inplot,
@@ -84,7 +84,8 @@ if __name__ == '__main__':
 
     for iteration in range(num_iterations):
         set_seed(int(args['--seed']))
-        set_seed(int(rng.integers(10000000) + iteration))
+        seed = r().integers(100000)
+        set_seed(int(seed + iteration))
         it_directory = Path(directory) / (str(iteration) + '_' + args['--seed'])
         it_directory.resolve().mkdir(parents=True, exist_ok=True)
         if parallel:
