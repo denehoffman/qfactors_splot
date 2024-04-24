@@ -16,6 +16,7 @@ Options:
     --t-dep                 Use t-dependence in mass variable
     --num-iter=<niter>      Specifies the number of iterations to run the analysis. [default: 1]
     --seed=<seed>           Starting seed for all iterations. [default: 0]
+    --append                Don't overwrite fit_results.tsv, create it if it doesn't exist or append if it does.
 """
 
 from __future__ import annotations
@@ -74,7 +75,8 @@ if __name__ == '__main__':
     Path(directory).resolve().mkdir(parents=True, exist_ok=True)
     tsv_filename = 'fit_results.tsv'
     tsv_filepath = Path(directory) / tsv_filename
-    tsv_filepath.write_text(Results.tsv_header())
+    if not args['--append']:
+        tsv_filepath.write_text(Results.tsv_header())
 
     parallel = args['--parallel']
 
