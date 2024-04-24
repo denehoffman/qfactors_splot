@@ -51,9 +51,7 @@ class Result:
 
     def to_tsv(self) -> str:
         return (
-            str(self.iteration)
-            + '\t'
-            + self.method
+            self.method
             + '\t'
             + '\t'.join(f'{value}\t{error}' for (_, value, error) in self.contents)
         )
@@ -71,7 +69,7 @@ class Results:
 
     @staticmethod
     def tsv_header() -> str:
-        return f"Iteration\tMethod\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\n0\tTruth\t{truths['p00']:.3f}\t0.000\t{truths['p1n1']:.3f}\t0.000\t{truths['p10']:.3f}\t0.000\t{truths['tau_sig']:.3f}\t0.000\t{truths['sigma_sig']:.3f}\t0.000\n"
+        return f"Method\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\nTruth\t{truths['p00']:.3f}\t0.000\t{truths['p1n1']:.3f}\t0.000\t{truths['p10']:.3f}\t0.000\t{truths['tau_sig']:.3f}\t0.000\t{truths['sigma_sig']:.3f}\t0.000\n"
 
     @staticmethod
     def load_from_res_file(res_path: Path | str) -> Results:
@@ -95,13 +93,8 @@ class Results:
             results.append(Result(header, iteration, fit_values))
         return Results(results)
 
-    def write_row(self, result: Result, output: Path | str | None):
+    def add_row(self, result: Result):
         self.results.append(result)
-        if output is not None:
-            out_path = Path(output) if isinstance(output, str) else output
-            data = out_path.read_text().strip('\n').split('\n')
-            data += result.to_res().split('\n')
-            out_path.write_text('\n'.join(data))
 
     def __rich_console__(self, _console: Console, _options: ConsoleOptions) -> RenderResult:
         t = Table(title='Fit Results')

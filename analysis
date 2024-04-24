@@ -17,6 +17,7 @@ Options:
     --num-iter=<niter>      Specifies the number of iterations to run the analysis. [default: 1]
     --seed=<seed>           Starting seed for all iterations. [default: 0]
     --append                Don't overwrite fit_results.tsv, create it if it doesn't exist or append if it does.
+    -o --output=<outdir>    Specify output directory. [default: studies]
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from pathlib import Path
 
 import numpy as np
 from docopt import docopt
-from sqfactors import console, plot, set_seed
+from sqfactors import console, plot, set_seed, rng
 from sqfactors.analysis import (
     bounds,
     calculate_inplot,
@@ -65,7 +66,8 @@ if __name__ == '__main__':
     else:
         use_radius_knn = None
 
-    directory = 'study'
+    outdir = Path(args['--output'])
+    directory = str(outdir / 'study')
     if use_density_knn:
         directory += '_density'
     if use_radius_knn:
@@ -75,15 +77,16 @@ if __name__ == '__main__':
     Path(directory).resolve().mkdir(parents=True, exist_ok=True)
     tsv_filename = 'fit_results.tsv'
     tsv_filepath = Path(directory) / tsv_filename
-    if not args['--append']:
+    if not args['--append'] or not tsv_filepath.is_file():
         tsv_filepath.write_text(Results.tsv_header())
 
     parallel = args['--parallel']
 
     for iteration in range(num_iterations):
-        it_directory = Path(directory) / str(iteration)
+        set_seed(int(args['--seed']))
+        set_seed(int(rng.integers(10000000) + iteration))
+        it_directory = Path(directory) / (str(iteration) + '_' + args['--seed'])
         it_directory.resolve().mkdir(parents=True, exist_ok=True)
-        set_seed(int(args['--seed']) + iteration)
         if parallel:
             # Generate events in parallel.
             console.print('Generating signal and background events in parallel ...')
@@ -225,9 +228,6 @@ if __name__ == '__main__':
         # Inside each iteration, process each analysis type
         for analysis_name, config in analysis_config.items():
             console.log(f'Processing {analysis_name} for iteration {iteration}...')
-            results_filename = f'fit_results_{iteration}.txt'
-            filepath = results_dir / results_filename
-            filepath.touch()
 
             # Calculate weights for this analysis type
             if (w_func := config.get('weight_func')) is not None:
@@ -241,8 +241,8 @@ if __name__ == '__main__':
 
             # Save row to outputs
             if sq_weights is not None:
-                results.write_row(
-                    get_results(config['descriptions'][0], iteration, events_all, weights), filepath
+                results.add_row(
+                    get_results(config['descriptions'][0], iteration, events_all, weights)
                 )
                 plot.plot_events(
                     events_all,
@@ -261,9 +261,8 @@ if __name__ == '__main__':
                         q_factor_type=analysis_name.lower().replace(' ', '_'),
                         directory=it_directory,
                     )
-                results.write_row(
+                results.add_row(
                     get_results(config['descriptions'][1], iteration, events_all, sq_weights),
-                    filepath,
                 )
                 plot.plot_events(
                     events_all,
@@ -283,9 +282,7 @@ if __name__ == '__main__':
                         directory=it_directory,
                     )
             else:
-                results.write_row(
-                    get_results(config['description'], iteration, events_all, weights), filepath
-                )
+                results.add_row(get_results(config['description'], iteration, events_all, weights))
                 plot.plot_events(
                     events_all,
                     events_sig,

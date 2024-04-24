@@ -5,12 +5,16 @@ import pandas as pd
 from rich.table import Table
 from sqfactors import console
 import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgb
 
 
-def zscore_to_colorstr(zscore: float, min_z: float, max_z: float) -> str:
-    start_color = (255, 100, 180)
-    end_color = (0, 180, 140)
-    normed_zscore = (zscore - min_z) / (max_z - min_z)
+def zscore_to_colorstr(zscore: float, absmin_z: float, absmax_z: float) -> str:
+    color_0 = '#FF2233'
+    color_1 = '#111188'
+    end_color = tuple(int(comp * 255) for comp in to_rgb(color_0))
+    start_color = tuple(int(comp * 255) for comp in to_rgb(color_1))
+    normed_zscore = (abs(zscore) - absmin_z) / (absmax_z - absmin_z)
     b = 40.0
     a = 1.0 / (1 - np.exp(-b))
     scaled_zscore = a - a * np.exp(-b * normed_zscore)
@@ -18,24 +22,30 @@ def zscore_to_colorstr(zscore: float, min_z: float, max_z: float) -> str:
     g = str(int(start_color[1] + (end_color[1] - start_color[1]) * scaled_zscore))
     b = str(int(start_color[2] + (end_color[2] - start_color[2]) * scaled_zscore))
     if scaled_zscore == 0:
-        return 'rgb(255,0,0)'
+        return 'white'
     return f'rgb({r},{g},{b})'
 
 
 if __name__ == '__main__':
     fit_file = Path(sys.argv[1])
     t = pd.read_table(fit_file)
-    max_iter = t['Iteration'].max()
     t = t[[col for col in t.columns if 'Error' not in col and 'Iteration' not in col]]
     truth = t.iloc[0]
 
-    def f(row):
-        return (row[1:] - truth[1:]).apply(lambda v: np.sqrt(v * v))
+    def f_diff(row):
+        return row[1:] - truth[1:]
 
-    t.iloc[:, 1:] = t.apply(f, axis=1)
-    m = t.groupby('Method')
-    mean = m.mean()
-    sigma = m.std()
+    def f_abs(x):
+        if isinstance(x, (int, float)):
+            return abs(x)
+        else:
+            return x
+
+    t.iloc[:, 1:] = t.apply(f_diff, axis=1)
+    m_diff = t.groupby('Method')
+    m_absdiff = t.applymap(f_abs).groupby('Method')
+    mean = m_absdiff.mean()
+    sigma = m_diff.std()  # = std(x) = std(|x-mu|)
     z = mean / sigma
     out = z[[col for col in z.columns if 'Method' not in col]]
     index_order = [
@@ -55,25 +65,93 @@ if __name__ == '__main__':
     ]
     out = out.reindex(index=index_order)
     tab = Table()
-    tab.add_column(f'Method {max_iter}x')
+    tab.add_column('Method')
     for col in out.columns:
         tab.add_column(col)
-        tab.add_column('<- σ/μ')
     for ind, method in enumerate(index_order):
         if method == 'Truth':
             continue
         rich_row = []
         out_row = out.loc[method]
-        sig_row = (sigma / mean).abs().loc[method]
         for col in out.columns:
-            min_z = out[col].abs().min()
-            max_z = out[col].abs().max()
-            color_str = zscore_to_colorstr(out_row[col], min_z, max_z)
-            if abs(out_row[col]) == min_z:
+            absmin_z = out[col].abs().min()
+            absmax_z = out[col].abs().max()
+            color_str = zscore_to_colorstr(out_row[col], absmin_z, absmax_z)
+            if abs(out_row[col]) == absmin_z:
                 color_str += ' bold'
             rich_row += [f'[{color_str}]{out_row[col]:.3f}[/]']
-            rich_row += [f'[rgb(100,100,100)]{sig_row[col]:.3f}[/]']
         tab.add_row(
             str(method).replace(' Analysis', ''), *rich_row, end_section=(ind == 2 or ind == 7)
         )
     console.print(tab)
+
+    def plot_pull(axis, method: str, var: str):
+        sig = t.iloc[m_diff.indices.get(method)][var].std()
+        data = t.iloc[m_diff.indices.get(method)][var].to_numpy()
+        axis.axvline(0, color='k', lw=3, label=var)
+        axis.hist(data / sig, label=method.replace(' Analysis', ''))
+        axis.legend(loc='upper right')
+
+    for col in [c for c in t.columns if c != 'Method']:
+        fig, ax = plt.subplot_mosaic("""ABCH\nDEFG\nIJKL""")
+        plot_pull(
+            ax['A'],
+            var=col,
+            method='No Weights Analysis',
+        )
+        plot_pull(
+            ax['B'],
+            var=col,
+            method='Sideband Subtraction Analysis',
+        )
+        plot_pull(
+            ax['C'],
+            var=col,
+            method='InPlot Analysis',
+        )
+        plot_pull(
+            ax['D'],
+            var=col,
+            method='Q-Factor Analysis',
+        )
+        plot_pull(
+            ax['E'],
+            var=col,
+            method='Q-Factor Analysis (with t)',
+        )
+        plot_pull(
+            ax['F'],
+            var=col,
+            method='Q-Factor Analysis (with g)',
+        )
+        plot_pull(
+            ax['G'],
+            var=col,
+            method='Q-Factor Analysis (with t & g)',
+        )
+        plot_pull(
+            ax['H'],
+            var=col,
+            method='sPlot Analysis',
+        )
+        plot_pull(
+            ax['I'],
+            var=col,
+            method='sQ-Factor Analysis',
+        )
+        plot_pull(
+            ax['J'],
+            var=col,
+            method='sQ-Factor Analysis (with t)',
+        )
+        plot_pull(
+            ax['K'],
+            var=col,
+            method='sQ-Factor Analysis (with g)',
+        )
+        plot_pull(
+            ax['L'],
+            var=col,
+            method='sQ-Factor Analysis (with t & g)',
+        )
+    plt.show()
