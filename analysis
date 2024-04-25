@@ -280,7 +280,7 @@ if __name__ == '__main__':
                         sq_weights,
                         q_factors_theoretical,
                         title=f"{config['descriptions'][1]} Comparison",
-                        q_factor_type=analysis_name.lower().replace(' ', '_'),
+                        q_factor_type='s' + analysis_name.lower().replace(' ', '_'),
                         directory=it_directory,
                     )
             else:
