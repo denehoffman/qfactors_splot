@@ -29,7 +29,15 @@ def zscore_to_colorstr(zscore: float, absmin_z: float, absmax_z: float) -> str:
 if __name__ == '__main__':
     fit_file = Path(sys.argv[1])
     t = pd.read_table(fit_file)
-    t = t[[col for col in t.columns if 'Error' not in col and 'Iteration' not in col]]
+    console.print(t)
+    t = t[t['Valid']]
+    t = t[
+        [
+            col
+            for col in t.columns
+            if 'Error' not in col and 'Iteration' not in col and 'Valid' not in col
+        ]
+    ]
     truth = t.iloc[0]
 
     def f_diff(row):
@@ -89,27 +97,20 @@ if __name__ == '__main__':
         sig = t.iloc[m_diff.indices.get(method)][var].std()
         data = t.iloc[m_diff.indices.get(method)][var].to_numpy()
         range_max = 3.0
-        if np.abs(np.mean(data)) > 1000:
-            console.print(var)
-            console.print(method)
-            console.print(np.abs(np.mean(data)))
-            console.print(data)
-        if (med := np.abs(np.median(data))) > range_max:
+        if np.abs(avg := np.mean(data) / sig) > range_max:
             # poor fit
             axis.axvline(0, color='k', lw=3, label=var)
             axis.hist(data / sig, label=method.replace(' Analysis', ''))
             axis.legend(loc='upper right')
-            inset = axis.inset_axes([0.7, 0.7, 0.2, 0.2])
-            console.print(med)
-            inset.hist(data / sig, range=(med - range_max, med + range_max))
-            inset.set_xlim(med - range_max, med + range_max)
+            inset = axis.inset_axes([0.4, 0.7, 0.2, 0.2])
+            inset.hist(data / sig, range=(avg - range_max, avg + range_max))
+            inset.set_xlim(avg - range_max, avg + range_max)
         else:
             # good fit
-            console.print(med)
             axis.axvline(0, color='k', lw=3, label=var)
             axis.hist(
                 data / sig,
-                range=(med - range_max, med + range_max),
+                range=(avg - range_max, avg + range_max),
                 label=method.replace(' Analysis', ''),
             )
             axis.legend(loc='upper right')
