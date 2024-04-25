@@ -32,11 +32,11 @@ m_sig_max = m_sig(truths['m_omega'])
 
 def m_bkg(m: float | np.ndarray, b: float = truths['b']) -> float | np.ndarray:
     """Background mass distribution modeled as a linear function"""
-    return (
-        2
-        * (bounds['m_min'] * (b - 1) + bounds['m_max'] * b + m - 2 * b * m)
-        / (bounds['m_min'] - bounds['m_max']) ** 2
-    )
+    x1 = bounds['m_min']
+    x2 = bounds['m_max']
+    y1 = b
+    y2 = (2.0 - (x2 - x1) * y1) / (x2 - x1)
+    return (y2 - y1) * (m - x1) / (x2 - x1) + y1
 
 
 m_bkg_max = m_bkg(bounds['m_max'], truths['b'])

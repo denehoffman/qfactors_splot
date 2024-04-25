@@ -112,14 +112,17 @@ def calculate_sideband_weights(events: list[Event]) -> np.ndarray:
     # 100% signal starting condition
     m_1 = Minuit(c, z=1.0, b=truths['b'])
     m_1.limits['z'] = (0, 1)
+    m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_1.migrad()
     # 100% background starting condition
     m_2 = Minuit(c, z=0.0, b=truths['b'])
     m_2.limits['z'] = (0, 1)
+    m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_2.migrad()
     # 50% signal / 50% background starting condition
     m_3 = Minuit(c, z=0.5, b=truths['b'])
     m_3.limits['z'] = (0, 1)
+    m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -149,14 +152,17 @@ def calculate_inplot(events: list[Event]) -> np.ndarray:
     # 100% signal starting condition
     m_1 = Minuit(c, z=1.0, b=truths['b'])
     m_1.limits['z'] = (0, 1)
+    m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_1.migrad()
     # 100% background starting condition
     m_2 = Minuit(c, z=0.0, b=truths['b'])
     m_2.limits['z'] = (0, 1)
+    m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_2.migrad()
     # 50% signal / 50% background starting condition
     m_3 = Minuit(c, z=0.5, b=truths['b'])
     m_3.limits['z'] = (0, 1)
+    m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -211,14 +217,17 @@ def calculate_q_factors(
         # 100% signal starting condition
         m_1 = Minuit(c, z=1.0, b=truths['b'])
         m_1.limits['z'] = (0, 1)
+        m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
         m_1.migrad(ncall=1000)
         # 100% background starting condition
         m_2 = Minuit(c, z=0.0, b=truths['b'])
         m_2.limits['z'] = (0, 1)
+        m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
         m_2.migrad(ncall=1000)
         # 50% signal / 50% background starting condition
         m_3 = Minuit(c, z=0.5, b=truths['b'])
         m_3.limits['z'] = (0, 1)
+        m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
         m_3.migrad(ncall=1000)
         fits = [m_1, m_2, m_3]
         valid_fits = [m for m in fits if m.valid]
@@ -302,7 +311,7 @@ def calculate_splot_weights(events: list[Event], sig_frac_init=0.5, b_init=0.5) 
     c = cost.UnbinnedNLL(ms, model)
     mi = Minuit(c, sig_frac=sig_frac_init, b=b_init)
     mi.limits['sig_frac'] = (0, 1)  # Ensuring physical bounds
-    mi.limits['b'] = (0, 1)
+    mi.limits['b'] = (bounds['b_min'], bounds['b_max'])
     mi.migrad()
 
     # Extract fit results for signal and background contributions
