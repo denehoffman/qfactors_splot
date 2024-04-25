@@ -86,7 +86,8 @@ if __name__ == '__main__':
         set_seed(int(args['--seed']))
         seed = r().integers(100000)
         set_seed(int(seed + iteration))
-        it_directory = Path(directory) / (str(iteration) + '_' + args['--seed'])
+        it_dir_name = args['--seed'] + '_' + str(iteration)
+        it_directory = Path(directory) / it_dir_name
         it_directory.resolve().mkdir(parents=True, exist_ok=True)
         if parallel:
             # Generate events in parallel.
@@ -243,7 +244,7 @@ if __name__ == '__main__':
             # Save row to outputs
             if sq_weights is not None:
                 results.add_row(
-                    get_results(config['descriptions'][0], iteration, events_all, weights)
+                    get_results(config['descriptions'][0], it_dir_name, events_all, weights)
                 )
                 plot.plot_events(
                     events_all,
@@ -263,7 +264,7 @@ if __name__ == '__main__':
                         directory=it_directory,
                     )
                 results.add_row(
-                    get_results(config['descriptions'][1], iteration, events_all, sq_weights),
+                    get_results(config['descriptions'][1], it_dir_name, events_all, sq_weights),
                 )
                 plot.plot_events(
                     events_all,
@@ -283,7 +284,9 @@ if __name__ == '__main__':
                         directory=it_directory,
                     )
             else:
-                results.add_row(get_results(config['description'], iteration, events_all, weights))
+                results.add_row(
+                    get_results(config['description'], it_dir_name, events_all, weights)
+                )
                 plot.plot_events(
                     events_all,
                     events_sig,

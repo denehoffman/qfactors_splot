@@ -43,7 +43,7 @@ if __name__ == '__main__':
 
     t.iloc[:, 1:] = t.apply(f_diff, axis=1)
     m_diff = t.groupby('Method')
-    m_absdiff = t.applymap(f_abs).groupby('Method')
+    m_absdiff = t.map(f_abs).groupby('Method')
     mean = m_absdiff.mean()
     sigma = m_diff.std()  # = std(x) = std(|x-mu|)
     z = mean / sigma
@@ -88,9 +88,32 @@ if __name__ == '__main__':
     def plot_pull(axis, method: str, var: str):
         sig = t.iloc[m_diff.indices.get(method)][var].std()
         data = t.iloc[m_diff.indices.get(method)][var].to_numpy()
-        axis.axvline(0, color='k', lw=3, label=var)
-        axis.hist(data / sig, label=method.replace(' Analysis', ''))
-        axis.legend(loc='upper right')
+        range_max = 3.0
+        if np.abs(np.mean(data)) > 1000:
+            console.print(var)
+            console.print(method)
+            console.print(np.abs(np.mean(data)))
+            console.print(data)
+        if (med := np.abs(np.median(data))) > range_max:
+            # poor fit
+            axis.axvline(0, color='k', lw=3, label=var)
+            axis.hist(data / sig, label=method.replace(' Analysis', ''))
+            axis.legend(loc='upper right')
+            inset = axis.inset_axes([0.7, 0.7, 0.2, 0.2])
+            console.print(med)
+            inset.hist(data / sig, range=(med - range_max, med + range_max))
+            inset.set_xlim(med - range_max, med + range_max)
+        else:
+            # good fit
+            console.print(med)
+            axis.axvline(0, color='k', lw=3, label=var)
+            axis.hist(
+                data / sig,
+                range=(med - range_max, med + range_max),
+                label=method.replace(' Analysis', ''),
+            )
+            axis.legend(loc='upper right')
+            axis.set_xlim(-range_max, range_max)
 
     for col in [c for c in t.columns if c != 'Method']:
         fig, ax = plt.subplot_mosaic("""ABCH\nDEFG\nIJKL""")

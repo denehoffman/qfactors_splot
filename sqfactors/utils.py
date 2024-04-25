@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import re
-from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from rich.table import Table
@@ -13,10 +11,13 @@ if TYPE_CHECKING:
 
 
 class Result:
-    def __init__(self, method: str, iteration: int, contents: list[tuple[str, float, float]]):
+    def __init__(
+        self, method: str, iteration: str, contents: list[tuple[str, float, float]], valid: bool
+    ):
         self.method = method
         self.iteration = iteration
         self.contents = contents
+        self.valid = valid
 
     @staticmethod
     def get_deviation(
@@ -51,15 +52,13 @@ class Result:
 
     def to_tsv(self) -> str:
         return (
-            self.method
+            self.iteration
+            + '\t'
+            + self.method
             + '\t'
             + '\t'.join(f'{value}\t{error}' for (_, value, error) in self.contents)
-        )
-
-    def to_res(self) -> str:
-        return f'=== {self.method} ===\nIteration: {self.iteration}\n' + '\n'.join(
-            f'{variable} = {value:.5f} +/- {error:.5f}'
-            for (variable, value, error) in self.contents
+            + '\t'
+            + str(self.valid)
         )
 
 
@@ -69,29 +68,7 @@ class Results:
 
     @staticmethod
     def tsv_header() -> str:
-        return f"Method\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\nTruth\t{truths['p00']:.3f}\t0.000\t{truths['p1n1']:.3f}\t0.000\t{truths['p10']:.3f}\t0.000\t{truths['tau_sig']:.3f}\t0.000\t{truths['sigma_sig']:.3f}\t0.000\n"
-
-    @staticmethod
-    def load_from_res_file(res_path: Path | str) -> Results:
-        res_path = Path(res_path) if isinstance(res_path, str) else res_path
-        res_text = res_path.read_text()
-        header_pattern = re.compile(r'===(.*?)===\s')
-        contents = re.split(header_pattern, res_text)
-        results = []
-        for header, content in zip(contents[1::2], contents[2::2]):
-            header = header.strip()
-            content_lines = content.splitlines()
-            iteration = int(content_lines[0].split(' ')[1])
-            fit_values = [
-                (
-                    row.split(' = ')[0],
-                    float(row.split(' = ')[1].split(' +/- ')[0]),
-                    float(row.split(' = ')[1].split(' +/- ')[1]),
-                )
-                for row in content_lines[1:]
-            ]
-            results.append(Result(header, iteration, fit_values))
-        return Results(results)
+        return f"Iteration\tMethod\tp00\tp00 Error\tp1n1\tp1n1 Error\tp10\tp10 Error\ttau_sig\ttau_sig Error\tsigma_sig\tsigma_sig Error\tValid\nN/A\tTruth\t{truths['p00']:.3f}\t0.000\t{truths['p1n1']:.3f}\t0.000\t{truths['p10']:.3f}\t0.000\t{truths['tau_sig']:.3f}\t0.000\t{truths['sigma_sig']:.3f}\t0.000\tTrue\n"
 
     def add_row(self, result: Result):
         self.results.append(result)
