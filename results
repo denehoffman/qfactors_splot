@@ -1,5 +1,13 @@
 #!/usr/bin/env python
-import sys
+"""
+Usage: results <tsv>
+       results <tsv> --plot
+
+Options:
+--plot  Compute pull distributions and plot
+"""
+
+from docopt import docopt
 from pathlib import Path
 import pandas as pd
 from rich.table import Table
@@ -27,10 +35,11 @@ def zscore_to_colorstr(zscore: float, absmin_z: float, absmax_z: float) -> str:
 
 
 if __name__ == '__main__':
-    fit_file = Path(sys.argv[1])
+    args = docopt(__doc__)
+    fit_file = Path(args['<tsv>'])
     t = pd.read_table(fit_file)
-    console.print(t)
     t = t[t['Valid']]
+    total_iterations = len(t.groupby('Iteration'))
     t = t[
         [
             col
@@ -73,7 +82,7 @@ if __name__ == '__main__':
     ]
     out = out.reindex(index=index_order)
     tab = Table()
-    tab.add_column('Method')
+    tab.add_column(f'Method ({total_iterations}x)')
     for col in out.columns:
         tab.add_column(col)
     for ind, method in enumerate(index_order):
@@ -116,66 +125,67 @@ if __name__ == '__main__':
             axis.legend(loc='upper right')
             axis.set_xlim(-range_max, range_max)
 
-    for col in [c for c in t.columns if c != 'Method']:
-        fig, ax = plt.subplot_mosaic("""ABCH\nDEFG\nIJKL""")
-        plot_pull(
-            ax['A'],
-            var=col,
-            method='No Weights Analysis',
-        )
-        plot_pull(
-            ax['B'],
-            var=col,
-            method='Sideband Subtraction Analysis',
-        )
-        plot_pull(
-            ax['C'],
-            var=col,
-            method='InPlot Analysis',
-        )
-        plot_pull(
-            ax['D'],
-            var=col,
-            method='Q-Factor Analysis',
-        )
-        plot_pull(
-            ax['E'],
-            var=col,
-            method='Q-Factor Analysis (with t)',
-        )
-        plot_pull(
-            ax['F'],
-            var=col,
-            method='Q-Factor Analysis (with g)',
-        )
-        plot_pull(
-            ax['G'],
-            var=col,
-            method='Q-Factor Analysis (with t & g)',
-        )
-        plot_pull(
-            ax['H'],
-            var=col,
-            method='sPlot Analysis',
-        )
-        plot_pull(
-            ax['I'],
-            var=col,
-            method='sQ-Factor Analysis',
-        )
-        plot_pull(
-            ax['J'],
-            var=col,
-            method='sQ-Factor Analysis (with t)',
-        )
-        plot_pull(
-            ax['K'],
-            var=col,
-            method='sQ-Factor Analysis (with g)',
-        )
-        plot_pull(
-            ax['L'],
-            var=col,
-            method='sQ-Factor Analysis (with t & g)',
-        )
-    plt.show()
+    if args['--plot']:
+        for col in [c for c in t.columns if c != 'Method']:
+            fig, ax = plt.subplot_mosaic("""ABCH\nDEFG\nIJKL""")
+            plot_pull(
+                ax['A'],
+                var=col,
+                method='No Weights Analysis',
+            )
+            plot_pull(
+                ax['B'],
+                var=col,
+                method='Sideband Subtraction Analysis',
+            )
+            plot_pull(
+                ax['C'],
+                var=col,
+                method='InPlot Analysis',
+            )
+            plot_pull(
+                ax['D'],
+                var=col,
+                method='Q-Factor Analysis',
+            )
+            plot_pull(
+                ax['E'],
+                var=col,
+                method='Q-Factor Analysis (with t)',
+            )
+            plot_pull(
+                ax['F'],
+                var=col,
+                method='Q-Factor Analysis (with g)',
+            )
+            plot_pull(
+                ax['G'],
+                var=col,
+                method='Q-Factor Analysis (with t & g)',
+            )
+            plot_pull(
+                ax['H'],
+                var=col,
+                method='sPlot Analysis',
+            )
+            plot_pull(
+                ax['I'],
+                var=col,
+                method='sQ-Factor Analysis',
+            )
+            plot_pull(
+                ax['J'],
+                var=col,
+                method='sQ-Factor Analysis (with t)',
+            )
+            plot_pull(
+                ax['K'],
+                var=col,
+                method='sQ-Factor Analysis (with g)',
+            )
+            plot_pull(
+                ax['L'],
+                var=col,
+                method='sQ-Factor Analysis (with t & g)',
+            )
+        plt.show()
