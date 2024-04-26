@@ -19,7 +19,7 @@ from matplotlib.colors import to_rgb
 
 def zscore_to_colorstr(zscore: float, absmin_z: float, absmax_z: float) -> str:
     color_0 = '#FF2233'
-    color_1 = '#111188'
+    color_1 = '#1133BB'
     end_color = tuple(int(comp * 255) for comp in to_rgb(color_0))
     start_color = tuple(int(comp * 255) for comp in to_rgb(color_1))
     normed_zscore = (abs(zscore) - absmin_z) / (absmax_z - absmin_z)
@@ -32,6 +32,17 @@ def zscore_to_colorstr(zscore: float, absmin_z: float, absmax_z: float) -> str:
     if scaled_zscore == 0:
         return 'white'
     return f'rgb({r},{g},{b})'
+
+
+latex_table_header = r"""\begin{table}
+\centering
+\begin{tabular}{llclclclclc}\toprule
+Weighting Method & & $\rho^0_{00}$ & & $\rho^0_{1,-1}$ & & $\Re[\rho^0_{10}]$ & & $\tau$ & & $\sigma$ \\ \midrule"""
+
+latex_table_footer = r"""\end{{tabular}}
+\caption{{Absolute mean pull of each parameter over {} independent simulations (smaller numbers are better). The five best results for a particular variable are labeled.}}
+\label{{table:abs_mean_pull}}
+\end{{table}}"""
 
 
 if __name__ == '__main__':
@@ -48,6 +59,7 @@ if __name__ == '__main__':
         ]
     ]
     truth = t.iloc[0]
+    t = t.iloc[1:]
 
     def f_diff(row):
         return row[1:] - truth[1:]
@@ -66,7 +78,6 @@ if __name__ == '__main__':
     z = mean / sigma
     out = z[[col for col in z.columns if 'Method' not in col]]
     index_order = [
-        'Truth',
         'No Weights Analysis',
         'Sideband Subtraction Analysis',
         'InPlot Analysis',
@@ -80,26 +91,56 @@ if __name__ == '__main__':
         'sQ-Factor Analysis (with g)',
         'sQ-Factor Analysis (with t & g)',
     ]
+    column_order = ['p00', 'p1n1', 'p10', 'tau_sig', 'sigma_sig']
+    colors = [
+        r'\cellcolor{blue!60}',
+        r'\cellcolor{blue!50}',
+        r'\cellcolor{blue!40}',
+        r'\cellcolor{blue!30}',
+        r'\cellcolor{blue!20}',
+        r'\cellcolor{blue!10}',
+        r'\cellcolor{red!10}',
+        r'\cellcolor{red!20}',
+        r'\cellcolor{red!30}',
+        r'\cellcolor{red!40}',
+        r'\cellcolor{red!50}',
+        r'\cellcolor{red!60}',
+    ]
     out = out.reindex(index=index_order)
     tab = Table()
     tab.add_column(f'Method ({total_iterations}x)')
-    for col in out.columns:
+    for col in column_order:
         tab.add_column(col)
+    console.print(latex_table_header)
     for ind, method in enumerate(index_order):
-        if method == 'Truth':
-            continue
         rich_row = []
         out_row = out.loc[method]
-        for col in out.columns:
+        method_name = str(method).replace(' Analysis', '').replace('&', 'and')
+        console.print(f'{method_name}', end='')
+        for col in column_order:
             absmin_z = out[col].abs().min()
             absmax_z = out[col].abs().max()
+            out[f'Rank {method}'] = out[col].rank()
+            rank = int(out[f'Rank {method}'].loc[method])
+            rank_str = colors[rank - 1] + (
+                '' if rank > 5 else (rf'\textbf{{{rank}.}}' if rank == 1 else f'{rank}.')
+            )
+            val_str = colors[rank - 1] + (
+                rf'\textbf{{{out_row[col]:.3f}}}' if rank == 1 else f'{out_row[col]:.3f}'
+            )
             color_str = zscore_to_colorstr(out_row[col], absmin_z, absmax_z)
             if abs(out_row[col]) == absmin_z:
                 color_str += ' bold'
             rich_row += [f'[{color_str}]{out_row[col]:.3f}[/]']
-        tab.add_row(
-            str(method).replace(' Analysis', ''), *rich_row, end_section=(ind == 2 or ind == 7)
-        )
+            console.print(f' & {rank_str} & {val_str}', end='')
+        tab.add_row(method_name, *rich_row, end_section=(ind == 1 or ind == 6))
+        if ind == 1 or ind == 6:
+            console.print(r' \\ \cmidrule{2-11}')
+        elif ind == 11:
+            console.print(r' \\ \bottomrule')
+        else:
+            console.print(r' \\')
+    console.print(latex_table_footer.format(total_iterations))
     console.print(tab)
 
     def plot_pull(axis, method: str, var: str):
