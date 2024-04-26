@@ -104,10 +104,11 @@ if __name__ == '__main__':
             events_sig = gen_sig(n=num_sig, t_dep=t_dep)
             events_bkg = gen_bkg(n=num_bkg)
 
-        with console.status('Plotting events'):
-            plot.plot_all_events(
-                events_sig, events_bkg, filename='all_events.png', directory=it_directory
-            )
+        if do_plots:
+            with console.status('Plotting events'):
+                plot.plot_all_events(
+                    events_sig, events_bkg, filename='all_events.png', directory=it_directory
+                )
         events_all = events_sig + events_bkg
 
         # Define weights functions and descriptions for various analyses
