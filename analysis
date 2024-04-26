@@ -18,6 +18,7 @@ Options:
     --seed=<seed>           Starting seed for all iterations. [default: 0]
     --append                Don't overwrite fit_results.tsv, create it if it doesn't exist or append if it does.
     -o --output=<outdir>    Specify output directory. [default: studies]
+    --skip-plots            Only produce TSV output
 """
 
 from __future__ import annotations
@@ -56,6 +57,8 @@ if __name__ == '__main__':
     use_radius_knn = args['--radius-knn']
     t_dep = args['--t-dep']
     num_iterations = int(args['--num-iter'])
+    skip_plots = args['--skip-plots']
+    do_plots = not skip_plots
 
     if use_radius_knn != 'None':
         try:
@@ -88,7 +91,8 @@ if __name__ == '__main__':
         set_seed(int(seed + iteration))
         it_dir_name = args['--seed'] + '_' + str(iteration)
         it_directory = Path(directory) / it_dir_name
-        it_directory.resolve().mkdir(parents=True, exist_ok=True)
+        if do_plots:
+            it_directory.resolve().mkdir(parents=True, exist_ok=True)
         if parallel:
             # Generate events in parallel.
             console.print('Generating signal and background events in parallel ...')
@@ -107,6 +111,7 @@ if __name__ == '__main__':
         events_all = events_sig + events_bkg
 
         # Define weights functions and descriptions for various analyses
+        fit_plot_indices = [0, 1, 2, num_sig, num_sig + 1, num_sig + 2] if do_plots else None
         analysis_config = {
             'No Weights': {
                 'weight_func': lambda _: np.ones(len(events_all)),
@@ -139,7 +144,7 @@ if __name__ == '__main__':
                     use_density_knn=use_density_knn,
                     use_radius_knn=use_radius_knn,
                     directory=str(it_directory),
-                    plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+                    plot_indices=fit_plot_indices,
                     t_dep=t_dep,
                 ),
                 'descriptions': ['Q-Factor Analysis', 'sQ-Factor Analysis'],
@@ -163,7 +168,7 @@ if __name__ == '__main__':
                     use_density_knn=use_density_knn,
                     use_radius_knn=use_radius_knn,
                     directory=it_directory,
-                    plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+                    plot_indices=fit_plot_indices,
                     t_dep=t_dep,
                 ),
                 'descriptions': ['Q-Factor Analysis (with t)', 'sQ-Factor Analysis (with t)'],
@@ -187,7 +192,7 @@ if __name__ == '__main__':
                     use_density_knn=use_density_knn,
                     use_radius_knn=use_radius_knn,
                     directory=it_directory,
-                    plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+                    plot_indices=fit_plot_indices,
                     t_dep=t_dep,
                 ),
                 'descriptions': ['Q-Factor Analysis (with g)', 'sQ-Factor Analysis (with g)'],
@@ -212,7 +217,7 @@ if __name__ == '__main__':
                     use_density_knn=use_density_knn,
                     use_radius_knn=use_radius_knn,
                     directory=it_directory,
-                    plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+                    plot_indices=fit_plot_indices,
                     t_dep=t_dep,
                 ),
                 'descriptions': [
@@ -222,10 +227,6 @@ if __name__ == '__main__':
                 'compare_q_factors_required': True,
             },
         }
-
-        # Directory for storing results
-        results_dir = Path(directory) / 'results'
-        results_dir.mkdir(exist_ok=True)
 
         # Handle each iteration
         console.print(f'Starting Iteration {iteration}', style='bold yellow')
@@ -250,70 +251,76 @@ if __name__ == '__main__':
                 results.add_row(
                     get_results(config['descriptions'][0], it_dir_name, events_all, weights)
                 )
-                plot.plot_events(
-                    events_all,
-                    events_sig,
-                    weights=weights,
-                    filename=f'events_{analysis_name}_{iteration}.png',
-                    directory=it_directory,
-                )
+                if do_plots:
+                    plot.plot_events(
+                        events_all,
+                        events_sig,
+                        weights=weights,
+                        filename=f'events_{analysis_name}_{iteration}.png',
+                        directory=it_directory,
+                    )
                 if config.get('compare_q_factors_required', True):
                     # Theoretical model remains constant across variants
                     q_factors_theoretical = calculate_theoretical_q_factors(events_all, truths['b'])
-                    plot.compare_q_factors(
-                        weights,
-                        q_factors_theoretical,
-                        title=f"{config['descriptions'][0]} Comparison",
-                        q_factor_type=analysis_name.lower().replace(' ', '_'),
-                        directory=it_directory,
-                    )
+                    if do_plots:
+                        plot.compare_q_factors(
+                            weights,
+                            q_factors_theoretical,
+                            title=f"{config['descriptions'][0]} Comparison",
+                            q_factor_type=analysis_name.lower().replace(' ', '_'),
+                            directory=it_directory,
+                        )
                 results.add_row(
                     get_results(config['descriptions'][1], it_dir_name, events_all, sq_weights),
                 )
-                plot.plot_events(
-                    events_all,
-                    events_sig,
-                    weights=sq_weights,
-                    filename=f'events_s{analysis_name}_{iteration}.png',
-                    directory=it_directory,
-                )
+                if do_plots:
+                    plot.plot_events(
+                        events_all,
+                        events_sig,
+                        weights=sq_weights,
+                        filename=f'events_s{analysis_name}_{iteration}.png',
+                        directory=it_directory,
+                    )
                 if config.get('compare_q_factors_required', True):
                     # Theoretical model remains constant across variants
                     q_factors_theoretical = calculate_theoretical_q_factors(events_all, truths['b'])
-                    plot.compare_q_factors(
-                        sq_weights,
-                        q_factors_theoretical,
-                        title=f"{config['descriptions'][1]} Comparison",
-                        q_factor_type='s' + analysis_name.lower().replace(' ', '_'),
-                        directory=it_directory,
-                    )
+                    if do_plots:
+                        plot.compare_q_factors(
+                            sq_weights,
+                            q_factors_theoretical,
+                            title=f"{config['descriptions'][1]} Comparison",
+                            q_factor_type='s' + analysis_name.lower().replace(' ', '_'),
+                            directory=it_directory,
+                        )
             else:
                 results.add_row(
                     get_results(config['description'], it_dir_name, events_all, weights)
                 )
-                plot.plot_events(
-                    events_all,
-                    events_sig,
-                    weights=weights,
-                    filename=f'events_{analysis_name}_{iteration}.png',
-                    directory=it_directory,
-                )
+                if do_plots:
+                    plot.plot_events(
+                        events_all,
+                        events_sig,
+                        weights=weights,
+                        filename=f'events_{analysis_name}_{iteration}.png',
+                        directory=it_directory,
+                    )
                 if config.get('compare_q_factors_required', True):
                     # Theoretical model remains constant across variants
                     q_factors_theoretical = calculate_theoretical_q_factors(events_all, truths['b'])
-                    plot.compare_q_factors(
-                        weights,
-                        q_factors_theoretical,
-                        title=f"{config['description']} Comparison",
-                        q_factor_type=analysis_name.lower().replace(' ', '_'),
-                        directory=it_directory,
-                    )
+                    if do_plots:
+                        plot.compare_q_factors(
+                            weights,
+                            q_factors_theoretical,
+                            title=f"{config['description']} Comparison",
+                            q_factor_type=analysis_name.lower().replace(' ', '_'),
+                            directory=it_directory,
+                        )
 
         console.print(results)
         with open(tsv_filepath, 'a') as tsv:
             tsv.write(results.as_tsv(header=False))
 
-        if use_radius_knn:
+        if use_radius_knn and do_plots:
             selected_event_index = 0  # Index of the event you want to inspect
             plot.plot_radius_knn_visualization(
                 events_all, selected_event_index, use_radius_knn, directory=it_directory
