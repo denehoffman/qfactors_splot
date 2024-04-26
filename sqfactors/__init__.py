@@ -13,6 +13,8 @@ bounds = {
     'g_max': 1.8,
     'b_min': 0.0,
     'b_max': 2.0 / (0.88 - 0.68),
+    't_sig_min': 0.001,
+    't_sig_max': 0.011,
 }
 truths = {
     'b': 3.0,

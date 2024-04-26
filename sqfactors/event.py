@@ -20,14 +20,24 @@ class Event(NamedTuple):
 
 # Define model functions for signal mass, background mass, signal angular distribution, etc.
 # voigt_norm = quad(lambda x: voigt_profile((x - truths["m_omega"]), truths["sigma"], truths["m_omega"] * truths["G_omega"] / 2), m_min, bounds["m_max"])
-def m_sig(m: float | np.ndarray) -> float | np.ndarray:
+def m_sig(m: float | np.ndarray, sigma: float | np.ndarray) -> float | np.ndarray:
     """Signal mass distribution modeled by a normalized Voigtian"""
-    return voigt_profile(
-        (m - truths['m_omega']), truths['sigma'], truths['m_omega'] * truths['G_omega'] / 2
-    )
+    return voigt_profile((m - truths['m_omega']), sigma, truths['m_omega'] * truths['G_omega'] / 2)
 
 
-m_sig_max = m_sig(truths['m_omega'])
+def sigma_t(t: float | np.ndarray, t_dep: bool = False) -> float | np.ndarray:
+    if t_dep:
+        return (t - bounds['t_min']) * (bounds['t_sig_max'] - bounds['t_sig_min']) / (
+            bounds['t_max'] - bounds['t_min']
+        ) + bounds['t_sig_min']
+    else:
+        if isinstance(t, np.ndarray):
+            return truths['sigma'] * np.ones_like(t)
+        else:
+            return truths['sigma']
+
+
+m_sig_max = m_sig(truths['m_omega'], bounds['t_sig_min'])  # thinnest peak should be tallest
 
 
 def m_bkg(m: float | np.ndarray, b: float = truths['b']) -> float | np.ndarray:
@@ -104,19 +114,27 @@ g_bkg_max = g_bkg(0, truths['sigma_bkg'])
 
 
 # Functions to generate signal and background events
-def gen_sig(n: int = 10_000) -> list:
+def gen_sig(n: int = 10_000, t_dep: bool = False) -> list:
     """Generate signal events"""
     with Progress(transient=True) as progress:
+        t_task = progress.add_task('Generating Signal (t)', total=n)
         m_task = progress.add_task('Generating Signal (mass)', total=n)
         w_task = progress.add_task('Generating Signal (costheta, phi)', total=n)
-        t_task = progress.add_task('Generating Signal (t)', total=n)
         g_task = progress.add_task('Generating Signal (g)', total=n)
+        ts = []
+        while len(ts) < n:
+            t_star = r().uniform(bounds['t_min'], bounds['t_max'])
+            if t_sig(t_star) >= r().uniform(0, t_sig_max):
+                ts.append(t_star)
+                progress.advance(t_task)
+        ind = 0
         ms = []
         while len(ms) < n:
             m_star = r().uniform(bounds['m_min'], bounds['m_max'])
-            if m_sig(m_star) >= r().uniform(0, m_sig_max):
+            if m_sig(m_star, sigma_t(ts[ind], t_dep=t_dep)) >= r().uniform(0, m_sig_max):
                 ms.append(m_star)
                 progress.advance(m_task)
+                ind += 1
         costhetas = []
         phis = []
         while len(costhetas) < n:
@@ -126,12 +144,6 @@ def gen_sig(n: int = 10_000) -> list:
                 costhetas.append(costheta_star)
                 phis.append(phi_star)
                 progress.advance(w_task)
-        ts = []
-        while len(ts) < n:
-            t_star = r().uniform(bounds['t_min'], bounds['t_max'])
-            if t_sig(t_star) >= r().uniform(0, t_sig_max):
-                ts.append(t_star)
-                progress.advance(t_task)
         gs = []
         while len(gs) < n:
             g_star = r().uniform(bounds['g_min'], bounds['g_max'])
@@ -148,10 +160,16 @@ def gen_sig(n: int = 10_000) -> list:
 def gen_bkg(n: int = 10_000) -> list:
     """Generate background events"""
     with Progress(transient=True) as progress:
+        t_task = progress.add_task('Generating Background (t)', total=n)
         m_task = progress.add_task('Generating Background (mass)', total=n)
         w_task = progress.add_task('Generating Background (costheta, phi)', total=n)
-        t_task = progress.add_task('Generating Background (t)', total=n)
         g_task = progress.add_task('Generating Background (g)', total=n)
+        ts = []
+        while len(ts) < n:
+            t_star = r().uniform(bounds['t_min'], bounds['t_max'])
+            if t_bkg(t_star) >= r().uniform(0, t_bkg_max):
+                ts.append(t_star)
+                progress.advance(t_task)
         ms = []
         while len(ms) < n:
             m_star = r().uniform(bounds['m_min'], bounds['m_max'])
@@ -167,12 +185,6 @@ def gen_bkg(n: int = 10_000) -> list:
                 costhetas.append(costheta_star)
                 phis.append(phi_star)
                 progress.advance(w_task)
-        ts = []
-        while len(ts) < n:
-            t_star = r().uniform(bounds['t_min'], bounds['t_max'])
-            if t_bkg(t_star) >= r().uniform(0, t_bkg_max):
-                ts.append(t_star)
-                progress.advance(t_task)
         gs = []
         while len(gs) < n:
             g_star = r().uniform(bounds['g_min'], bounds['g_max'])
@@ -193,11 +205,19 @@ def gen_event_partial(n, seed):
     for _ in range(n):
         ms, costhetas, phis, ts, gs = [], [], [], [], []
 
+        # Generate t
+        while len(ts) < 1:
+            t_star = rng.uniform(bounds['t_min'], bounds['t_max'])
+            if t_sig(t_star) >= rng.uniform(0, t_sig_max):
+                ts.append(t_star)
+
+        ind = 0
         # Generate mass
         while len(ms) < 1:
             m_star = rng.uniform(bounds['m_min'], bounds['m_max'])
-            if m_sig(m_star) >= rng.uniform(0, m_sig_max):
+            if m_sig(m_star, sigma_t(ts[ind])) >= rng.uniform(0, m_sig_max):
                 ms.append(m_star)
+                ind += 1
 
         # Generate costheta and phi
         while len(costhetas) < 1:
@@ -206,12 +226,6 @@ def gen_event_partial(n, seed):
             if w_sig(costheta_star, phi_star) >= rng.uniform(0, w_sig_max):
                 costhetas.append(costheta_star)
                 phis.append(phi_star)
-
-        # Generate t
-        while len(ts) < 1:
-            t_star = rng.uniform(bounds['t_min'], bounds['t_max'])
-            if t_sig(t_star) >= rng.uniform(0, t_sig_max):
-                ts.append(t_star)
 
         # Generate g
         while len(gs) < 1:

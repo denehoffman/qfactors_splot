@@ -97,7 +97,7 @@ if __name__ == '__main__':
         else:
             # Default to sequential generation.
             console.print('Generating signal and background events sequentially ...')
-            events_sig = gen_sig(n=num_sig)
+            events_sig = gen_sig(n=num_sig, t_dep=t_dep)
             events_bkg = gen_bkg(n=num_bkg)
 
         with console.status('Plotting events'):
@@ -114,17 +114,17 @@ if __name__ == '__main__':
                 'compare_q_factors_required': False,
             },
             'Sideband': {
-                'weight_func': calculate_sideband_weights,
+                'weight_func': lambda events: calculate_sideband_weights(events, t_dep=t_dep),
                 'description': 'Sideband Subtraction Analysis',
                 'compare_q_factors_required': False,
             },
             'InPlot': {
-                'weight_func': calculate_inplot,
+                'weight_func': lambda events: calculate_inplot(events, t_dep=t_dep),
                 'description': 'InPlot Analysis',
                 'compare_q_factors_required': False,
             },
             'sPlot': {
-                'weight_func': lambda events: calculate_splot_weights(events)[:, 0],
+                'weight_func': lambda events: calculate_splot_weights(events, t_dep=t_dep)[:, 0],
                 'description': 'sPlot Analysis',
                 'compare_q_factors_required': False,
             },
@@ -140,6 +140,7 @@ if __name__ == '__main__':
                     use_radius_knn=use_radius_knn,
                     directory=str(it_directory),
                     plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+                    t_dep=t_dep,
                 ),
                 'descriptions': ['Q-Factor Analysis', 'sQ-Factor Analysis'],
                 'compare_q_factors_required': True,
@@ -163,6 +164,7 @@ if __name__ == '__main__':
                     use_radius_knn=use_radius_knn,
                     directory=it_directory,
                     plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+                    t_dep=t_dep,
                 ),
                 'descriptions': ['Q-Factor Analysis (with t)', 'sQ-Factor Analysis (with t)'],
                 'compare_q_factors_required': True,
@@ -186,6 +188,7 @@ if __name__ == '__main__':
                     use_radius_knn=use_radius_knn,
                     directory=it_directory,
                     plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+                    t_dep=t_dep,
                 ),
                 'descriptions': ['Q-Factor Analysis (with g)', 'sQ-Factor Analysis (with g)'],
                 'compare_q_factors_required': True,
@@ -210,6 +213,7 @@ if __name__ == '__main__':
                     use_radius_knn=use_radius_knn,
                     directory=it_directory,
                     plot_indices=[0, 1, 2, num_sig, num_sig + 1, num_sig + 2],
+                    t_dep=t_dep,
                 ),
                 'descriptions': [
                     'Q-Factor Analysis (with t & g)',

@@ -100,29 +100,38 @@ class WeightedUnbinnedNLL:
 # Functions to plot event distributions and fits
 
 
-def calculate_sideband_weights(events: list[Event]) -> np.ndarray:
+def calculate_sideband_weights(events: list[Event], t_dep: bool = False) -> np.ndarray:
     ms = np.array([e.mass for e in events])
     left_cut = truths['m_omega'] - 3 * truths['G_omega']
     right_cut = truths['m_omega'] + 3 * truths['G_omega']
 
-    def model(x: np.ndarray, z, b, *args) -> np.ndarray:  # noqa: ARG001
-        return z * m_sig(x) + (1 - z) * m_bkg(x, b)
+    def model(x: np.ndarray, z, b, sigma, *args) -> np.ndarray:  # noqa: ARG001
+        return z * m_sig(x, sigma) + (1 - z) * m_bkg(x, b)
 
     c = cost.UnbinnedNLL(ms, model)
     # 100% signal starting condition
-    m_1 = Minuit(c, z=1.0, b=truths['b'])
+    m_1 = Minuit(c, z=1.0, b=truths['b'], sigma=truths['sigma'])
     m_1.limits['z'] = (0, 1)
     m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
+    m_1.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+    if not t_dep:
+        m_1.fixed['sigma'] = True
     m_1.migrad()
     # 100% background starting condition
-    m_2 = Minuit(c, z=0.0, b=truths['b'])
+    m_2 = Minuit(c, z=0.0, b=truths['b'], sigma=truths['sigma'])
     m_2.limits['z'] = (0, 1)
     m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
+    m_2.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+    if not t_dep:
+        m_2.fixed['sigma'] = True
     m_2.migrad()
     # 50% signal / 50% background starting condition
-    m_3 = Minuit(c, z=0.5, b=truths['b'])
+    m_3 = Minuit(c, z=0.5, b=truths['b'], sigma=truths['sigma'])
     m_3.limits['z'] = (0, 1)
     m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
+    m_3.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+    if not t_dep:
+        m_3.fixed['sigma'] = True
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -138,31 +147,40 @@ def calculate_sideband_weights(events: list[Event]) -> np.ndarray:
     return weights
 
 
-def calculate_inplot(events: list[Event]) -> np.ndarray:
+def calculate_inplot(events: list[Event], t_dep: bool = False) -> np.ndarray:
     ms = np.array([e.mass for e in events])
 
-    def model(x: np.ndarray, z, b, *args) -> np.ndarray:  # noqa: ARG001
-        return z * m_sig(x) + (1 - z) * m_bkg(x, b)
+    def model(x: np.ndarray, z, b, sigma, *args) -> np.ndarray:  # noqa: ARG001
+        return z * m_sig(x, sigma) + (1 - z) * m_bkg(x, b)
 
-    def inplot(x: np.ndarray, z, b, *args) -> np.ndarray:  # noqa: ARG001
-        return (z * m_sig(x)) / (z * m_sig(x) + (1 - z) * m_bkg(x, b))
+    def inplot(x: np.ndarray, z, b, sigma, *args) -> np.ndarray:  # noqa: ARG001
+        return (z * m_sig(x, sigma)) / (z * m_sig(x, sigma) + (1 - z) * m_bkg(x, b))
 
     inplot_weights = []
     c = cost.UnbinnedNLL(ms, model)
     # 100% signal starting condition
-    m_1 = Minuit(c, z=1.0, b=truths['b'])
+    m_1 = Minuit(c, z=1.0, b=truths['b'], sigma=truths['sigma'])
     m_1.limits['z'] = (0, 1)
     m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
+    m_1.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+    if not t_dep:
+        m_1.fixed['sigma'] = True
     m_1.migrad()
     # 100% background starting condition
-    m_2 = Minuit(c, z=0.0, b=truths['b'])
+    m_2 = Minuit(c, z=0.0, b=truths['b'], sigma=truths['sigma'])
     m_2.limits['z'] = (0, 1)
     m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
+    m_2.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+    if not t_dep:
+        m_2.fixed['sigma'] = True
     m_2.migrad()
     # 50% signal / 50% background starting condition
-    m_3 = Minuit(c, z=0.5, b=truths['b'])
+    m_3 = Minuit(c, z=0.5, b=truths['b'], sigma=truths['sigma'])
     m_3.limits['z'] = (0, 1)
     m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
+    m_3.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+    if not t_dep:
+        m_3.fixed['sigma'] = True
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -180,6 +198,7 @@ def calculate_q_factors(
     use_radius_knn=None,
     plot_indices: list[int] | None = None,
     directory: str | Path = 'study',
+    t_dep: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     ms = np.array([e.mass for e in events])
 
@@ -203,11 +222,11 @@ def calculate_q_factors(
             # Exclude the first index for each event since it is the event itself
             knn_indices = [index_set[1:] for index_set in indices]
 
-    def model(x: np.ndarray, z, b, *args) -> np.ndarray:  # noqa: ARG001
-        return z * m_sig(x) + (1 - z) * m_bkg(x, b)
+    def model(x: np.ndarray, z, b, sigma, *args) -> np.ndarray:  # noqa: ARG001
+        return z * m_sig(x, sigma) + (1 - z) * m_bkg(x, b)
 
-    def inplot(x, z, b, *args) -> float:  # noqa: ARG001
-        return (z * m_sig(x)) / (z * m_sig(x) + (1 - z) * m_bkg(x, b))
+    def inplot(x, z, b, sigma, *args) -> float:  # noqa: ARG001
+        return (z * m_sig(x, sigma)) / (z * m_sig(x, sigma) + (1 - z) * m_bkg(x, b))
 
     q_factors = []
     sq_factors = []
@@ -215,19 +234,28 @@ def calculate_q_factors(
         indices = knn_indices[i]
         c = cost.UnbinnedNLL(ms[indices], model)
         # 100% signal starting condition
-        m_1 = Minuit(c, z=1.0, b=truths['b'])
+        m_1 = Minuit(c, z=1.0, b=truths['b'], sigma=truths['sigma'])
         m_1.limits['z'] = (0, 1)
         m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
+        m_1.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+        if not t_dep:
+            m_1.fixed['sigma'] = True
         m_1.migrad(ncall=1000)
         # 100% background starting condition
-        m_2 = Minuit(c, z=0.0, b=truths['b'])
+        m_2 = Minuit(c, z=0.0, b=truths['b'], sigma=truths['sigma'])
         m_2.limits['z'] = (0, 1)
         m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
+        m_2.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+        if not t_dep:
+            m_2.fixed['sigma'] = True
         m_2.migrad(ncall=1000)
         # 50% signal / 50% background starting condition
-        m_3 = Minuit(c, z=0.5, b=truths['b'])
+        m_3 = Minuit(c, z=0.5, b=truths['b'], sigma=truths['sigma'])
         m_3.limits['z'] = (0, 1)
         m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
+        m_3.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+        if not t_dep:
+            m_3.fixed['sigma'] = True
         m_3.migrad(ncall=1000)
         fits = [m_1, m_2, m_3]
         valid_fits = [m for m in fits if m.valid]
@@ -236,11 +264,14 @@ def calculate_q_factors(
             best_fit = valid_fits[np.argmin(nlls)]
             n_sig = len(ms[indices]) * best_fit.values[0]  # noqa: PD011
             n_bkg = len(ms[indices]) * (1 - best_fit.values[0])  # noqa: PD011
-            b = best_fit.values[1]  # noqa: PD011
+            b = best_fit.values['b']  # noqa: PD011
+            sigma = best_fit.values['sigma']  # noqa: PD011
             V_ss_inv = np.sum(
                 np.array(
                     [
-                        m_sig(m) * m_sig(m) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                        m_sig(m, sigma)
+                        * m_sig(m, sigma)
+                        / (n_sig * m_sig(m, sigma) + n_bkg * m_bkg(m, b)) ** 2
                         for m in ms[indices]
                     ]
                 ),
@@ -249,7 +280,9 @@ def calculate_q_factors(
             V_sb_inv = np.sum(
                 np.array(
                     [
-                        m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                        m_sig(m, sigma)
+                        * m_bkg(m, b)
+                        / (n_sig * m_sig(m, sigma) + n_bkg * m_bkg(m, b)) ** 2
                         for m in ms[indices]
                     ]
                 ),
@@ -258,7 +291,9 @@ def calculate_q_factors(
             V_bb_inv = np.sum(
                 np.array(
                     [
-                        m_bkg(m, b) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                        m_bkg(m, b)
+                        * m_bkg(m, b)
+                        / (n_sig * m_sig(m, sigma) + n_bkg * m_bkg(m, b)) ** 2
                         for m in ms[indices]
                     ]
                 ),
@@ -275,19 +310,19 @@ def calculate_q_factors(
                 V = np.linalg.inv(Vmat_inv_reg)
 
             sq_factors.append(
-                (V[0, 0] * m_sig(ms[i]) + V[0, 1] * m_bkg(ms[i], b))
-                / (n_sig * m_sig(ms[i]) + n_bkg * m_bkg(ms[i], b))
+                (V[0, 0] * m_sig(ms[i], sigma) + V[0, 1] * m_bkg(ms[i], b))
+                / (n_sig * m_sig(ms[i], sigma) + n_bkg * m_bkg(ms[i], b))
             )
             q_factors.append(inplot(ms[i], *best_fit.values))  # noqa: PD011
-            weird_check = abs(sq_factors[i]) > 100 or abs(q_factors[i]) > 1
-            if plot_indices and i in plot_indices or weird_check:
+            if plot_indices and i in plot_indices:
                 plot_qfactor_fit(
                     ms[i],
                     ms[indices],
-                    z_fit=best_fit.values[0],  # noqa: PD011
-                    b_fit=best_fit.values[1],  # noqa: PD011
+                    z_fit=best_fit.values['z'],  # noqa: PD011
+                    b_fit=best_fit.values['b'],  # noqa: PD011
+                    sigma_fit=best_fit.values['sigma'],  # noqa: PD011
                     event_index=i,
-                    qfactor_type=f'{name}{tag}_anomaly',
+                    qfactor_type=f'{name}{tag}',
                     directory=directory,
                 )
         else:
@@ -300,43 +335,56 @@ def calculate_q_factors(
     return np.array(q_factors), np.array(sq_factors)
 
 
-def calculate_splot_weights(events: list[Event], sig_frac_init=0.5, b_init=0.5) -> np.ndarray:
+def calculate_splot_weights(
+    events: list[Event], sig_frac_init=0.5, b_init=0.5, t_dep: bool = False
+) -> np.ndarray:
     """Calculate sPlot weights for distinguishing signal from background"""
     ms = np.array([e.mass for e in events])  # Extracting the mass values from events
 
-    def model(x: np.ndarray, sig_frac, b, *args) -> np.ndarray:  # noqa: ARG001
-        return sig_frac * m_sig(x) + (1 - sig_frac) * m_bkg(x, b)
+    def model(x: np.ndarray, sig_frac, b, sigma, *args) -> np.ndarray:  # noqa: ARG001
+        return sig_frac * m_sig(x, sigma) + (1 - sig_frac) * m_bkg(x, b)
 
     # Performing the fit
     c = cost.UnbinnedNLL(ms, model)
-    mi = Minuit(c, sig_frac=sig_frac_init, b=b_init)
+    mi = Minuit(c, sig_frac=sig_frac_init, b=b_init, sigma=truths['sigma'])
     mi.limits['sig_frac'] = (0, 1)  # Ensuring physical bounds
     mi.limits['b'] = (bounds['b_min'], bounds['b_max'])
+    mi.limits['sigma'] = (bounds['t_sig_min'], bounds['t_sig_max'])
+    if not t_dep:
+        mi.fixed['sigma'] = True
     mi.migrad()
 
     # Extract fit results for signal and background contributions
     n_sig = len(events) * mi.values['sig_frac']  # noqa: PD011
     n_bkg = len(events) * (1 - mi.values['sig_frac'])  # noqa: PD011
     b = mi.values['b']  # noqa: PD011
+    sigma = mi.values['sigma']  # noqa: PD011
 
     # Calculate inverse variance matrix elements
-    V_ss_inv = np.sum([m_sig(m) ** 2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms])
+    V_ss_inv = np.sum(
+        [m_sig(m, sigma) ** 2 / (n_sig * m_sig(m, sigma) + n_bkg * m_bkg(m, b)) ** 2 for m in ms]
+    )
     V_sb_inv = np.sum(
-        [m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms]
+        [
+            m_sig(m, sigma) * m_bkg(m, b) / (n_sig * m_sig(m, sigma) + n_bkg * m_bkg(m, b)) ** 2
+            for m in ms
+        ]
     )
     V_bb_inv = np.sum(
-        [m_bkg(m, b) ** 2 / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2 for m in ms]
+        [m_bkg(m, b) ** 2 / (n_sig * m_sig(m, sigma) + n_bkg * m_bkg(m, b)) ** 2 for m in ms]
     )
     Vmat_inv = np.array([[V_ss_inv, V_sb_inv], [V_sb_inv, V_bb_inv]])
     V = np.linalg.inv(Vmat_inv)
 
     # Calculate sWeights and bWeights for each event
     sweights = [
-        (V[0, 0] * m_sig(m) + V[0, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))
+        (V[0, 0] * m_sig(m, sigma) + V[0, 1] * m_bkg(m, b))
+        / (n_sig * m_sig(m, sigma) + n_bkg * m_bkg(m, b))
         for m in ms
     ]
     bweights = [
-        (V[1, 0] * m_sig(m) + V[1, 1] * m_bkg(m, b)) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b))
+        (V[1, 0] * m_sig(m, sigma) + V[1, 1] * m_bkg(m, b))
+        / (n_sig * m_sig(m, sigma) + n_bkg * m_bkg(m, b))
         for m in ms
     ]
 
@@ -402,7 +450,7 @@ def calculate_theoretical_q_factors(events, b_true):
     masses = np.array([event.mass for event in events])
 
     # Calculate signal and background densities using the vectorized functions
-    signal_densities = m_sig(masses)
+    signal_densities = m_sig(masses, truths['sigma'])  # TODO: fix this to be avg sigma
     # console.print(signal_densities)
     background_densities = m_bkg(masses, b_true)
     # console.print(background_densities)

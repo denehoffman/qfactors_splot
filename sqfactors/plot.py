@@ -273,13 +273,14 @@ def plot_qfactor_fit(
     ms,
     z_fit: float,
     b_fit: float,
+    sigma_fit: float,
     event_index: int,
     qfactor_type: str,
     directory: str | Path = 'study',
 ):
     # Combined model for the fit
-    def model(m, z, b) -> float | np.ndarray:
-        return z * m_sig(m) + (1 - z) * m_bkg(m, b)
+    def model(m, z, b, sigma) -> float | np.ndarray:
+        return z * m_sig(m, sigma) + (1 - z) * m_bkg(m, b)
 
     plt.figure(figsize=(10, 6))
     # Scatter plot of selected masses
@@ -291,7 +292,7 @@ def plot_qfactor_fit(
     plt.axvline(mstar, ls=':', lw=2, color=BLACK, label='Event')
     plt.plot(
         m_range,
-        np.array([z_fit * m_sig(m_val) for m_val in m_range]),
+        np.array([z_fit * m_sig(m_val, sigma_fit) for m_val in m_range]),
         ls='-',
         lw=2,
         color=BLUE,
@@ -307,7 +308,7 @@ def plot_qfactor_fit(
     )
     plt.plot(
         m_range,
-        np.array([model(m_val, z_fit, b_fit) for m_val in m_range]),
+        np.array([model(m_val, z_fit, b_fit, sigma_fit) for m_val in m_range]),
         ls='-',
         lw=2.5,
         color=PURPLE,
