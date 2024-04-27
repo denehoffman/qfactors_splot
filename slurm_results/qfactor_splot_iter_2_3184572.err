@@ -1,0 +1,83 @@
+Traceback (most recent call last):
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/texmanager.py", line 250, in _run_checked_subprocess
+    report = subprocess.check_output(
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/subprocess.py", line 466, in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/subprocess.py", line 548, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib64/python3.11/subprocess.py", line 1950, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'dvipng'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/zbaldwin/qfactors_splot/analysis", line 255, in <module>
+    plot.compare_q_factors(
+  File "/home/zbaldwin/qfactors_splot/sqfactors/plot.py", line 396, in compare_q_factors
+    plt.savefig(
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/pyplot.py", line 1134, in savefig
+    res = fig.savefig(*args, **kwargs)  # type: ignore[func-returns-value]
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/figure.py", line 3390, in savefig
+    self.canvas.print_figure(fname, **kwargs)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/backend_bases.py", line 2193, in print_figure
+    result = print_method(
+             ^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/backend_bases.py", line 2043, in <lambda>
+    print_method = functools.wraps(meth)(lambda *args, **kwargs: meth(
+                                                                 ^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/backends/backend_agg.py", line 497, in print_png
+    self._print_pil(filename_or_obj, "png", pil_kwargs, metadata)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/backends/backend_agg.py", line 445, in _print_pil
+    FigureCanvasAgg.draw(self)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/backends/backend_agg.py", line 388, in draw
+    self.figure.draw(self.renderer)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/artist.py", line 95, in draw_wrapper
+    result = draw(artist, renderer, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/figure.py", line 3154, in draw
+    mimage._draw_list_compositing_images(
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/image.py", line 132, in _draw_list_compositing_images
+    a.draw(renderer)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/axes/_base.py", line 3070, in draw
+    mimage._draw_list_compositing_images(
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/image.py", line 132, in _draw_list_compositing_images
+    a.draw(renderer)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/axis.py", line 1391, in draw
+    tick.draw(renderer)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/axis.py", line 295, in draw
+    artist.draw(renderer)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/artist.py", line 72, in draw_wrapper
+    return draw(artist, renderer)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/text.py", line 793, in draw
+    textrenderer.draw_tex(gc, x, y, clean_line,
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/backends/backend_agg.py", line 236, in draw_tex
+    Z = texmanager.get_grey(s, size, self.dpi)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/texmanager.py", line 336, in get_grey
+    pngfile = cls.make_png(tex, fontsize, dpi)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/texmanager.py", line 323, in make_png
+    cls._run_checked_subprocess(cmd, tex)
+  File "/home/zbaldwin/.local/lib/python3.11/site-packages/matplotlib/texmanager.py", line 254, in _run_checked_subprocess
+    raise RuntimeError(
+RuntimeError: Failed to process string with tex because dvipng could not be found
