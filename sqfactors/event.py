@@ -7,7 +7,7 @@ import numpy as np
 from rich.progress import Progress
 from scipy.special import voigt_profile
 
-from sqfactors import bounds, rng, truths
+from sqfactors import bounds, r, truths
 
 
 class Event(NamedTuple):
@@ -32,11 +32,11 @@ m_sig_max = m_sig(truths['m_omega'])
 
 def m_bkg(m: float | np.ndarray, b: float = truths['b']) -> float | np.ndarray:
     """Background mass distribution modeled as a linear function"""
-    return (
-        2
-        * (bounds['m_min'] * (b - 1) + bounds['m_max'] * b + m - 2 * b * m)
-        / (bounds['m_min'] - bounds['m_max']) ** 2
-    )
+    x1 = bounds['m_min']
+    x2 = bounds['m_max']
+    y1 = b
+    y2 = (2.0 - (x2 - x1) * y1) / (x2 - x1)
+    return (y2 - y1) * (m - x1) / (x2 - x1) + y1
 
 
 m_bkg_max = m_bkg(bounds['m_max'], truths['b'])
@@ -113,29 +113,29 @@ def gen_sig(n: int = 10_000) -> list:
         g_task = progress.add_task('Generating Signal (g)', total=n)
         ms = []
         while len(ms) < n:
-            m_star = rng.uniform(bounds['m_min'], bounds['m_max'])
-            if m_sig(m_star) >= rng.uniform(0, m_sig_max):
+            m_star = r().uniform(bounds['m_min'], bounds['m_max'])
+            if m_sig(m_star) >= r().uniform(0, m_sig_max):
                 ms.append(m_star)
                 progress.advance(m_task)
         costhetas = []
         phis = []
         while len(costhetas) < n:
-            costheta_star = rng.uniform(-1, 1)
-            phi_star = rng.uniform(-np.pi, np.pi)
-            if w_sig(costheta_star, phi_star) >= rng.uniform(0, w_sig_max):
+            costheta_star = r().uniform(-1, 1)
+            phi_star = r().uniform(-np.pi, np.pi)
+            if w_sig(costheta_star, phi_star) >= r().uniform(0, w_sig_max):
                 costhetas.append(costheta_star)
                 phis.append(phi_star)
                 progress.advance(w_task)
         ts = []
         while len(ts) < n:
-            t_star = rng.uniform(bounds['t_min'], bounds['t_max'])
-            if t_sig(t_star) >= rng.uniform(0, t_sig_max):
+            t_star = r().uniform(bounds['t_min'], bounds['t_max'])
+            if t_sig(t_star) >= r().uniform(0, t_sig_max):
                 ts.append(t_star)
                 progress.advance(t_task)
         gs = []
         while len(gs) < n:
-            g_star = rng.uniform(bounds['g_min'], bounds['g_max'])
-            if g_sig(g_star) >= rng.uniform(0, g_sig_max):
+            g_star = r().uniform(bounds['g_min'], bounds['g_max'])
+            if g_sig(g_star) >= r().uniform(0, g_sig_max):
                 gs.append(g_star)
                 progress.advance(g_task)
 
@@ -154,29 +154,29 @@ def gen_bkg(n: int = 10_000) -> list:
         g_task = progress.add_task('Generating Background (g)', total=n)
         ms = []
         while len(ms) < n:
-            m_star = rng.uniform(bounds['m_min'], bounds['m_max'])
-            if m_bkg(m_star) >= rng.uniform(0, m_bkg_max):
+            m_star = r().uniform(bounds['m_min'], bounds['m_max'])
+            if m_bkg(m_star) >= r().uniform(0, m_bkg_max):
                 ms.append(m_star)
                 progress.advance(m_task)
         costhetas = []
         phis = []
         while len(costhetas) < n:
-            costheta_star = rng.uniform(-1, 1)
-            phi_star = rng.uniform(-np.pi, np.pi)
-            if w_bkg(costheta_star, phi_star) >= rng.uniform(0, w_bkg_max):
+            costheta_star = r().uniform(-1, 1)
+            phi_star = r().uniform(-np.pi, np.pi)
+            if w_bkg(costheta_star, phi_star) >= r().uniform(0, w_bkg_max):
                 costhetas.append(costheta_star)
                 phis.append(phi_star)
                 progress.advance(w_task)
         ts = []
         while len(ts) < n:
-            t_star = rng.uniform(bounds['t_min'], bounds['t_max'])
-            if t_bkg(t_star) >= rng.uniform(0, t_bkg_max):
+            t_star = r().uniform(bounds['t_min'], bounds['t_max'])
+            if t_bkg(t_star) >= r().uniform(0, t_bkg_max):
                 ts.append(t_star)
                 progress.advance(t_task)
         gs = []
         while len(gs) < n:
-            g_star = rng.uniform(bounds['g_min'], bounds['g_max'])
-            if g_bkg(g_star) >= rng.uniform(0, g_bkg_max):
+            g_star = r().uniform(bounds['g_min'], bounds['g_max'])
+            if g_bkg(g_star) >= r().uniform(0, g_bkg_max):
                 gs.append(g_star)
                 progress.advance(g_task)
         return [

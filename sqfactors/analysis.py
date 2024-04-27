@@ -112,14 +112,17 @@ def calculate_sideband_weights(events: list[Event]) -> np.ndarray:
     # 100% signal starting condition
     m_1 = Minuit(c, z=1.0, b=truths['b'])
     m_1.limits['z'] = (0, 1)
+    m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_1.migrad()
     # 100% background starting condition
     m_2 = Minuit(c, z=0.0, b=truths['b'])
     m_2.limits['z'] = (0, 1)
+    m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_2.migrad()
     # 50% signal / 50% background starting condition
     m_3 = Minuit(c, z=0.5, b=truths['b'])
     m_3.limits['z'] = (0, 1)
+    m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -149,14 +152,17 @@ def calculate_inplot(events: list[Event]) -> np.ndarray:
     # 100% signal starting condition
     m_1 = Minuit(c, z=1.0, b=truths['b'])
     m_1.limits['z'] = (0, 1)
+    m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_1.migrad()
     # 100% background starting condition
     m_2 = Minuit(c, z=0.0, b=truths['b'])
     m_2.limits['z'] = (0, 1)
+    m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_2.migrad()
     # 50% signal / 50% background starting condition
     m_3 = Minuit(c, z=0.5, b=truths['b'])
     m_3.limits['z'] = (0, 1)
+    m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
     m_3.migrad()
     fits = [m_1, m_2, m_3]
     nlls = np.array([m.fval for m in fits])
@@ -211,73 +217,86 @@ def calculate_q_factors(
         # 100% signal starting condition
         m_1 = Minuit(c, z=1.0, b=truths['b'])
         m_1.limits['z'] = (0, 1)
-        m_1.migrad()
+        m_1.limits['b'] = (bounds['b_min'], bounds['b_max'])
+        m_1.migrad(ncall=1000)
         # 100% background starting condition
         m_2 = Minuit(c, z=0.0, b=truths['b'])
         m_2.limits['z'] = (0, 1)
-        m_2.migrad()
+        m_2.limits['b'] = (bounds['b_min'], bounds['b_max'])
+        m_2.migrad(ncall=1000)
         # 50% signal / 50% background starting condition
         m_3 = Minuit(c, z=0.5, b=truths['b'])
         m_3.limits['z'] = (0, 1)
-        m_3.migrad()
+        m_3.limits['b'] = (bounds['b_min'], bounds['b_max'])
+        m_3.migrad(ncall=1000)
         fits = [m_1, m_2, m_3]
-        nlls = np.array([m.fval for m in fits])
-        best_fit = fits[np.argmin(nlls)]
-        n_sig = len(ms[indices]) * best_fit.values[0]  # noqa: PD011
-        n_bkg = len(ms[indices]) * (1 - best_fit.values[0])  # noqa: PD011
-        b = best_fit.values[1]  # noqa: PD011
-        V_ss_inv = np.sum(
-            np.array(
-                [
-                    m_sig(m) * m_sig(m) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
-                    for m in ms[indices]
-                ]
-            ),
-            axis=0,
-        )
-        V_sb_inv = np.sum(
-            np.array(
-                [
-                    m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
-                    for m in ms[indices]
-                ]
-            ),
-            axis=0,
-        )
-        V_bb_inv = np.sum(
-            np.array(
-                [
-                    m_bkg(m, b) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
-                    for m in ms[indices]
-                ]
-            ),
-            axis=0,
-        )
-        Vmat_inv = np.array([[V_ss_inv, V_sb_inv], [V_sb_inv, V_bb_inv]])
-        # Fix issue if matrix inversion is not possible
-        try:
-            V = np.linalg.inv(Vmat_inv)
-        except np.linalg.LinAlgError:
-            console.print('Encountered a singular matrix, applying regularization.')
-            epsilon = 1e-5  # Small regularization term
-            Vmat_inv_reg = Vmat_inv + epsilon * np.eye(Vmat_inv.shape[0])
-            V = np.linalg.inv(Vmat_inv_reg)
-
-        sq_factors.append(
-            (V[0, 0] * m_sig(ms[i]) + V[0, 1] * m_bkg(ms[i], b))
-            / (n_sig * m_sig(ms[i]) + n_bkg * m_bkg(ms[i], b))
-        )
-        q_factors.append(inplot(ms[i], *best_fit.values))  # noqa: PD011
-        if plot_indices and i in plot_indices:
-            plot_qfactor_fit(
-                ms[i],
-                ms[indices],
-                z_fit=best_fit.values[0],  # noqa: PD011
-                b_fit=best_fit.values[1],  # noqa: PD011
-                event_index=i,
-                qfactor_type=f'{name}{tag}',
-                directory=directory,
+        valid_fits = [m for m in fits if m.valid]
+        if valid_fits:
+            nlls = np.array([m.fval for m in valid_fits])
+            best_fit = valid_fits[np.argmin(nlls)]
+            n_sig = len(ms[indices]) * best_fit.values[0]  # noqa: PD011
+            n_bkg = len(ms[indices]) * (1 - best_fit.values[0])  # noqa: PD011
+            b = best_fit.values[1]  # noqa: PD011
+            V_ss_inv = np.sum(
+                np.array(
+                    [
+                        m_sig(m) * m_sig(m) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                        for m in ms[indices]
+                    ]
+                ),
+                axis=0,
             )
+            V_sb_inv = np.sum(
+                np.array(
+                    [
+                        m_sig(m) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                        for m in ms[indices]
+                    ]
+                ),
+                axis=0,
+            )
+            V_bb_inv = np.sum(
+                np.array(
+                    [
+                        m_bkg(m, b) * m_bkg(m, b) / (n_sig * m_sig(m) + n_bkg * m_bkg(m, b)) ** 2
+                        for m in ms[indices]
+                    ]
+                ),
+                axis=0,
+            )
+            Vmat_inv = np.array([[V_ss_inv, V_sb_inv], [V_sb_inv, V_bb_inv]])
+            # Fix issue if matrix inversion is not possible
+            try:
+                V = np.linalg.inv(Vmat_inv)
+            except np.linalg.LinAlgError:
+                console.print('Encountered a singular matrix, applying regularization.')
+                epsilon = 1e-5  # Small regularization term
+                Vmat_inv_reg = Vmat_inv + epsilon * np.eye(Vmat_inv.shape[0])
+                V = np.linalg.inv(Vmat_inv_reg)
+
+            sq_factors.append(
+                (V[0, 0] * m_sig(ms[i]) + V[0, 1] * m_bkg(ms[i], b))
+                / (n_sig * m_sig(ms[i]) + n_bkg * m_bkg(ms[i], b))
+            )
+            q_factors.append(inplot(ms[i], *best_fit.values))  # noqa: PD011
+            weird_check = abs(sq_factors[i]) > 100 or abs(q_factors[i]) > 1
+            if plot_indices and i in plot_indices or weird_check:
+                plot_qfactor_fit(
+                    ms[i],
+                    ms[indices],
+                    z_fit=best_fit.values[0],  # noqa: PD011
+                    b_fit=best_fit.values[1],  # noqa: PD011
+                    event_index=i,
+                    qfactor_type=f'{name}{tag}_anomaly',
+                    directory=directory,
+                )
+        else:
+            console.print(f'All fits for event {i} failed:')
+            console.print(m_1)
+            console.print(m_2)
+            console.print(m_3)
+            q_factors.append(0.0)
+            sq_factors.append(0.0)
     return np.array(q_factors), np.array(sq_factors)
 
 
@@ -292,7 +311,7 @@ def calculate_splot_weights(events: list[Event], sig_frac_init=0.5, b_init=0.5) 
     c = cost.UnbinnedNLL(ms, model)
     mi = Minuit(c, sig_frac=sig_frac_init, b=b_init)
     mi.limits['sig_frac'] = (0, 1)  # Ensuring physical bounds
-    mi.limits['b'] = (0, 1)
+    mi.limits['b'] = (bounds['b_min'], bounds['b_max'])
     mi.migrad()
 
     # Extract fit results for signal and background contributions
@@ -396,7 +415,7 @@ def calculate_theoretical_q_factors(events, b_true):
     return np.where(total_densities > 0, signal_densities / total_densities, 0)
 
 
-def get_results(method: str, iteration: int, events: list[Event], weights=None) -> Result:
+def get_results(method: str, iteration: str, events: list[Event], weights=None) -> Result:
     mi_angles = fit_angles(events, weights=weights)
     mi_t = fit_t(events, weights=weights)
     mi_g = fit_g(events, weights=weights)
@@ -410,4 +429,5 @@ def get_results(method: str, iteration: int, events: list[Event], weights=None) 
             ('tau_sig', mi_t.values['tau_sig'], mi_t.errors['tau_sig']),  # noqa: PD011
             ('sigma_sig', mi_g.values['sigma_sig'], mi_g.errors['sigma_sig']),  # noqa: PD011
         ],
+        valid=mi_angles.valid and mi_t.valid and mi_g.valid,
     )

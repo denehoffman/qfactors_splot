@@ -11,9 +11,11 @@ bounds = {
     't_max': 2.0,
     'g_min': -1.8,
     'g_max': 1.8,
+    'b_min': 0.0,
+    'b_max': 2.0 / (0.88 - 0.68),
 }
 truths = {
-    'b': 0.3,
+    'b': 3.0,
     'm_omega': 0.78256,
     'G_omega': 0.00844,
     'sigma': 0.005,
@@ -26,7 +28,12 @@ truths = {
     'sigma_bkg': 0.56,
 }
 
-rng = np.random.default_rng(1)
+rng = np.random.default_rng(0)
+
+
+def r():
+    global rng
+    return rng
 
 
 def set_seed(n):
