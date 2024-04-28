@@ -26,13 +26,17 @@ def zscore_to_colorstr(zscore: float, absmin_z: float, absmax_z: float) -> str:
     b = 40.0
     a = 1.0 / (1 - np.exp(-b))
     scaled_zscore = a - a * np.exp(-b * normed_zscore)
+    
+    if np.isnan(scaled_zscore):
+        return 'yellow'
+    
     r = str(int(start_color[0] + (end_color[0] - start_color[0]) * scaled_zscore))
     g = str(int(start_color[1] + (end_color[1] - start_color[1]) * scaled_zscore))
     b = str(int(start_color[2] + (end_color[2] - start_color[2]) * scaled_zscore))
+    
     if scaled_zscore == 0:
         return 'white'
     return f'rgb({r},{g},{b})'
-
 
 if __name__ == '__main__':
     args = docopt(__doc__)

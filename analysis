@@ -23,6 +23,8 @@ Options:
 from __future__ import annotations
 
 from pathlib import Path
+import sys
+import os
 
 import numpy as np
 from docopt import docopt
@@ -82,7 +84,20 @@ if __name__ == '__main__':
 
     parallel = args['--parallel']
 
-    for iteration in range(num_iterations):
+    # Determine if SLURM is being used
+    running_in_slurm = 'SLURM_JOB_ID' in os.environ
+
+    # Specify the iteration to run in SLURM mode
+    iteration_to_run = int(args['--num-iter']) if running_in_slurm else None
+   
+    if running_in_slurm and iteration_to_run is not None:
+        iteration_range = [iteration_to_run]
+    else:
+        iteration_range = range(1, num_iterations + 1)
+
+    # Process each iteration
+    for iteration in iteration_range:
+
         set_seed(int(args['--seed']))
         seed = r().integers(100000)
         set_seed(int(seed + iteration))
@@ -281,7 +296,7 @@ if __name__ == '__main__':
                         q_factors_theoretical,
                         title=f"{config['descriptions'][1]} Comparison",
                         q_factor_type='s' + analysis_name.lower().replace(' ', '_'),
-                        directory=it_directory,
+                directory=it_directory,
                     )
             else:
                 results.add_row(
