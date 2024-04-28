@@ -87,7 +87,7 @@ if __name__ == '__main__':
     # Determine if SLURM is being used
     running_in_slurm = 'SLURM_JOB_ID' in os.environ
 
-    # Specify the iteration to run in SLURM mode
+    # Specify the iteration to run in SLURM from bash
     iteration_to_run = int(args['--num-iter']) if running_in_slurm else None
    
     if running_in_slurm and iteration_to_run is not None:
@@ -95,7 +95,6 @@ if __name__ == '__main__':
     else:
         iteration_range = range(1, num_iterations + 1)
 
-    # Process each iteration
     for iteration in iteration_range:
 
         set_seed(int(args['--seed']))

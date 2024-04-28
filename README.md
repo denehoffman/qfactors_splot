@@ -7,6 +7,10 @@ This Python program contains a simple analysis and comparison of multiple statis
 3. Run the analysis script: `python analysis.py`
 4. Profit?
 
+#### SLURM Usage
+1. Modify 'run_analysis.sh'   
+2. Execute the SLURM submission script: `./submit_jobs.sh`
+
 # Disclaimer
 This analysis is part of an ongoing project which will eventually be published, please don't scoop me, I'll know it and raise hell :)
 
