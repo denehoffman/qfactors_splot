@@ -1,6 +1,17 @@
 import numpy as np
 from rich.console import Console
 
+# Define colorscheme
+RED = '#CC3311'
+BLUE = '#0077BB'
+PURPLE = '#AA3377'
+BLACK = '#000000'
+PALE_GRAY = '#DDDDDD'
+DARK_GRAY = '#555555'
+ERROR_RED = '#CC3311'
+CMAP = 'viridis'
+
+
 console = Console()
 
 # Define constants to generate MC according to https://arxiv.org/abs/0804.3382

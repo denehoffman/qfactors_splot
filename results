@@ -11,10 +11,14 @@ from docopt import docopt
 from pathlib import Path
 import pandas as pd
 from rich.table import Table
-from sqfactors import console
+from sqfactors import console, BLUE, RED
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgb
+import matplotlib as mpl
+
+mpl.rcParams['figure.titlesize'] = 24
+mpl.rcParams['axes.labelsize'] = 16
 
 
 def zscore_to_colorstr(zscore: float, absmin_z: float, absmax_z: float) -> str:
@@ -36,18 +40,19 @@ def zscore_to_colorstr(zscore: float, absmin_z: float, absmax_z: float) -> str:
 
 latex_table_header = r"""\begin{table}
 \centering
-\begin{tabular}{llclclclclc}\toprule
+\begin{tabular}{lrlrlrlrlrl}\toprule
+& \multicolumn{6}{c}{$\theta, \varphi$} & \multicolumn{2}{c}{$t$} & \multicolumn{2}{c}{$g$} \\\cmidrule(lr){2-7}\cmidrule(lr){8-9}\cmidrule(lr){10-11}
 Weighting Method & & $\rho^0_{00}$ & & $\rho^0_{1,-1}$ & & $\Re[\rho^0_{10}]$ & & $\tau$ & & $\sigma$ \\ \midrule"""
 
 latex_table_footer = r"""\end{{tabular}}
-\caption{{Absolute mean pull of each parameter over {} independent simulations (smaller numbers are better). The five best results for a particular variable are labeled.}}
+\caption{{Absolute mean pull of each parameter over ${}$ independent simulations (smaller numbers are better). The five best results for a particular variable are labeled.}}
 \label{{table:abs_mean_pull}}
 \end{{table}}"""
 
 
 if __name__ == '__main__':
     args = docopt(__doc__)
-    fit_file = Path(args['<tsv>'])
+    fit_file = Path(args['<tsv>']).resolve()
     t = pd.read_table(fit_file)
     t = t[t['Valid']]
     total_iterations = len(t.groupby('Iteration'))
@@ -74,7 +79,7 @@ if __name__ == '__main__':
     m_diff = t.groupby('Method')
     m_absdiff = t.map(f_abs).groupby('Method')
     mean = m_absdiff.mean()
-    sigma = m_diff.std()  # = std(x) = std(|x-mu|)
+    sigma = m_diff.std()  # = std(x) = std(x-mu)
     z = mean / sigma
     out = z[[col for col in z.columns if 'Method' not in col]]
     index_order = [
@@ -91,7 +96,14 @@ if __name__ == '__main__':
         'sQ-Factor Analysis (with g)',
         'sQ-Factor Analysis (with t & g)',
     ]
-    column_order = ['p00', 'p1n1', 'p10', 'tau_sig', 'sigma_sig']
+    column_labels = {
+        'p00': r'$\rho^0_{00}$',
+        'p1n1': r'$\rho^0_{1,-1}$',
+        'p10': r'$\Re[\rho^0_{10}]$',
+        'tau_sig': r'$\tau$',
+        'sigma_sig': r'$\sigma$',
+    }
+    column_order = list(column_labels.keys())
     colors = [
         r'\cellcolor{blue!60}',
         r'\cellcolor{blue!50}',
@@ -122,12 +134,8 @@ if __name__ == '__main__':
             absmax_z = out[col].abs().max()
             out[f'Rank {method}'] = out[col].rank()
             rank = int(out[f'Rank {method}'].loc[method])
-            rank_str = colors[rank - 1] + (
-                '' if rank > 5 else (rf'\textbf{{{rank}.}}' if rank == 1 else f'{rank}.')
-            )
-            val_str = colors[rank - 1] + (
-                rf'\textbf{{{out_row[col]:.3f}}}' if rank == 1 else f'{out_row[col]:.3f}'
-            )
+            rank_str = colors[rank - 1] + ('' if rank > 5 else f'{rank}.')
+            val_str = colors[rank - 1] + f'${out_row[col]:.3f}$'
             color_str = zscore_to_colorstr(out_row[col], absmin_z, absmax_z)
             if abs(out_row[col]) == absmin_z:
                 color_str += ' bold'
@@ -147,86 +155,58 @@ if __name__ == '__main__':
         sig = t.iloc[m_diff.indices.get(method)][var].std()
         data = t.iloc[m_diff.indices.get(method)][var].to_numpy()
         range_max = 3.0
+        axis.set_title(method.replace(' Analysis', '').replace('&', 'and'))
         if np.abs(avg := np.mean(data) / sig) > range_max:
             # poor fit
-            axis.axvline(0, color='k', lw=3, label=var)
-            axis.hist(data / sig, label=method.replace(' Analysis', ''))
-            axis.legend(loc='upper right')
-            inset = axis.inset_axes([0.4, 0.7, 0.2, 0.2])
-            inset.hist(data / sig, range=(avg - range_max, avg + range_max))
-            inset.set_xlim(avg - range_max, avg + range_max)
-        else:
-            # good fit
-            axis.axvline(0, color='k', lw=3, label=var)
+            axis.axvline(0, color='k', lw=3)
+            axis.axvline(avg, color='k', ls=':', lw=3, label='mean')
             axis.hist(
                 data / sig,
+                bins='auto',
+                color=RED,
+                label='pull',
+            )
+            axis.legend(loc='upper right')
+            # inset = axis.inset_axes([0.4, 0.5, 0.3, 0.3])
+            # inset.hist(data / sig, bins='auto', range=(avg - range_max, avg + range_max), color=RED)
+            # inset.set_xlim(avg - range_max, avg + range_max)
+        else:
+            # good fit
+            axis.axvline(0, color='k', lw=3)
+            axis.axvline(avg, color='k', ls=':', lw=3, label='mean')
+            axis.hist(
+                data / sig,
+                bins='auto',
                 range=(avg - range_max, avg + range_max),
-                label=method.replace(' Analysis', ''),
+                color=BLUE,
+                label='pull',
             )
             axis.legend(loc='upper right')
             axis.set_xlim(-range_max, range_max)
 
     if args['--plot']:
-        for col in [c for c in t.columns if c != 'Method']:
-            fig, ax = plt.subplot_mosaic("""ABCH\nDEFG\nIJKL""")
-            plot_pull(
-                ax['A'],
-                var=col,
-                method='No Weights Analysis',
-            )
-            plot_pull(
-                ax['B'],
-                var=col,
-                method='Sideband Subtraction Analysis',
-            )
-            plot_pull(
-                ax['C'],
-                var=col,
-                method='InPlot Analysis',
-            )
-            plot_pull(
-                ax['D'],
-                var=col,
-                method='Q-Factor Analysis',
-            )
-            plot_pull(
-                ax['E'],
-                var=col,
-                method='Q-Factor Analysis (with t)',
-            )
-            plot_pull(
-                ax['F'],
-                var=col,
-                method='Q-Factor Analysis (with g)',
-            )
-            plot_pull(
-                ax['G'],
-                var=col,
-                method='Q-Factor Analysis (with t & g)',
-            )
-            plot_pull(
-                ax['H'],
-                var=col,
-                method='sPlot Analysis',
-            )
-            plot_pull(
-                ax['I'],
-                var=col,
-                method='sQ-Factor Analysis',
-            )
-            plot_pull(
-                ax['J'],
-                var=col,
-                method='sQ-Factor Analysis (with t)',
-            )
-            plot_pull(
-                ax['K'],
-                var=col,
-                method='sQ-Factor Analysis (with g)',
-            )
-            plot_pull(
-                ax['L'],
-                var=col,
-                method='sQ-Factor Analysis (with t & g)',
-            )
-        plt.show()
+        for col, title in column_labels.items():
+            fig, ax = plt.subplot_mosaic("""ABCH\nDEFG\nIJKL""", figsize=(16, 9))
+            fig.suptitle(f'Pull Distributions for {title}')
+            plots = {
+                'A': 'No Weights Analysis',
+                'B': 'Sideband Subtraction Analysis',
+                'C': 'InPlot Analysis',
+                'D': 'Q-Factor Analysis',
+                'E': 'Q-Factor Analysis (with t)',
+                'F': 'Q-Factor Analysis (with g)',
+                'G': 'Q-Factor Analysis (with t & g)',
+                'H': 'sPlot Analysis',
+                'I': 'sQ-Factor Analysis',
+                'J': 'sQ-Factor Analysis (with t)',
+                'K': 'sQ-Factor Analysis (with g)',
+                'L': 'sQ-Factor Analysis (with t & g)',
+            }
+            for axis_id, method in plots.items():
+                plot_pull(
+                    ax[axis_id],
+                    var=col,
+                    method=method,
+                )
+            plt.tight_layout()
+            plt.savefig(fit_file.parent / f'{col}_pull.png', dpi=300)

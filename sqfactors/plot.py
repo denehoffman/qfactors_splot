@@ -8,23 +8,25 @@ import numpy as np
 from matplotlib.patches import Circle
 from scipy.stats import ks_2samp
 
-from sqfactors import bounds, console
+from sqfactors import (
+    bounds,
+    console,
+    RED,
+    BLUE,
+    PURPLE,
+    BLACK,
+    PALE_GRAY,
+    DARK_GRAY,
+    ERROR_RED,
+    CMAP,
+)
+
 from sqfactors.event import Event, m_bkg, m_sig
 
 mpl.use('Agg')
 mpl.rcParams['text.usetex'] = True
 mpl.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 mpl.rcParams['axes.labelsize'] = 16
-
-# Define colorscheme
-RED = '#CC3311'
-BLUE = '#0077BB'
-PURPLE = '#AA3377'
-BLACK = '#000000'
-PALE_GRAY = '#DDDDDD'
-DARK_GRAY = '#555555'
-ERROR_RED = '#CC3311'
-CMAP = 'viridis'
 
 
 def plot_events(

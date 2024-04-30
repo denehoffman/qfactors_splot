@@ -163,3 +163,4 @@ cython_debug/
 *.txt
 .DS_Store
 study*
+*.slurm
