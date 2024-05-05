@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -12,9 +13,6 @@ from sqfactors import bounds, console
 from sqfactors.event import Event, m_bkg, m_sig
 
 mpl.use('Agg')
-mpl.rcParams['text.usetex'] = True
-mpl.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
-mpl.rcParams['axes.labelsize'] = 16
 
 # Define colorscheme
 RED = '#CC3311'
@@ -26,6 +24,19 @@ DARK_GRAY = '#555555'
 ERROR_RED = '#CC3311'
 CMAP = 'viridis'
 
+# Check if running within a Slurm environment
+def running_in_slurm():
+    return 'SLURM_JOB_ID' in os.environ
+
+# Conditionally set LaTeX rendering based on Slurm environment
+if running_in_slurm():
+    mpl.rcParams['text.usetex'] = False
+    mpl.rcParams['text.latex.preamble'] = ''
+    mpl.rcParams['axes.labelsize'] = 16
+else:
+    mpl.rcParams['text.usetex'] = True
+    mpl.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
+    mpl.rcParams['axes.labelsize'] = 16
 
 def plot_events(
     events: list[Event],
