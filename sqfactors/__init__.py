@@ -2,13 +2,13 @@ import numpy as np
 from rich.console import Console
 
 # Define colorscheme
-RED = '#CC3311'
-BLUE = '#0077BB'
-PURPLE = '#AA3377'
+RED = '#e78284'
+BLUE = '#8caaee'
+PURPLE = '#ca9ee6'
 BLACK = '#000000'
-PALE_GRAY = '#DDDDDD'
-DARK_GRAY = '#555555'
-ERROR_RED = '#CC3311'
+PALE_GRAY = '#c6d0f5'
+DARK_GRAY = '#51576d'
+ERROR_RED = '#e78284'
 CMAP = 'viridis'
 
 
